@@ -6,7 +6,7 @@ import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from 'firebase/fires
 
 // --- Firebase Initialization ---
 // NOTE FOR NETLIFY DEPLOYMENT: 
-// Replace the fallback object below with your ACTUAL Firebase config object from your Firebase Console.
+// The code will automatically use this object when deployed outside of this preview console.
 let firebaseConfig;
 try {
   firebaseConfig = typeof __firebase_config !== 'undefined'
@@ -27,8 +27,18 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Fix: Ensure the App ID never contains slashes which break Firebase Document Paths
-const appId = typeof __app_id !== 'undefined' ? String(__app_id).split('/')[0] : 'rota-manager-app';
+// Helper to construct a valid Document Reference dynamically.
+// This handles the preview console's quirk where App IDs contain slashes,
+// whilst simultaneously satisfying Firebase's requirement for an even number of path segments.
+const getRotaDocRef = () => {
+  const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
+  const segments = ['artifacts', ...rawAppId.split('/'), 'public', 'data', 'clinic_rota', 'shared_data'];
+  
+  if (segments.length % 2 !== 0) {
+    segments.push('doc'); // Pad to make it an even number of segments for doc()
+  }
+  return doc(db, ...segments);
+};
 
 // --- Sample/Default Data ---
 const INITIAL_ROOMS = [
@@ -67,7 +77,7 @@ export default function App() {
   const [roomList, setRoomList] = useState(INITIAL_ROOMS);
   const [schedulesByWeek, setSchedulesByWeek] = useState({ 'master': {} });
   
-  const clinicTypes = Object.keys(targets);
+  const clinicTypes = Object.keys(targets).sort((a, b) => a.localeCompare(b));
 
   // --- UI State ---
   const [activeWeek, setActiveWeek] = useState('master');
@@ -83,8 +93,10 @@ export default function App() {
   
   const [isManagingStaff, setIsManagingStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
+  const [staffToDelete, setStaffToDelete] = useState(null);
   const [isManagingRooms, setIsManagingRooms] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
+  const [roomToDelete, setRoomToDelete] = useState(null);
   const [showWeekends, setShowWeekends] = useState(false);
 
   const activeDays = showWeekends ? [...WEEKDAYS, ...WEEKENDS] : WEEKDAYS;
@@ -114,8 +126,7 @@ export default function App() {
     if (!user) return;
 
     try {
-      // Practice-wide shared path instead of user-specific path
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'clinic_rota', 'shared_data');
+      const docRef = getRotaDocRef();
 
       const unsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -125,7 +136,7 @@ export default function App() {
           if (data.roomList) setRoomList(data.roomList);
           if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
         } else {
-          // Initialize new user with defaults
+          // Initialize new database entry with defaults
           setDoc(docRef, {
             targets: INITIAL_TARGETS,
             staffList: INITIAL_STAFF,
@@ -158,9 +169,7 @@ export default function App() {
 
     // Persist to Cloud
     try {
-      // Practice-wide shared path instead of user-specific path
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'clinic_rota', 'shared_data');
-      // Use updateDoc instead of setDoc with merge to ensure deleted object keys stay deleted!
+      const docRef = getRotaDocRef();
       await updateDoc(docRef, { [field]: value });
     } catch (e) {
       console.error("Failed to save to database:", e);
@@ -275,7 +284,13 @@ export default function App() {
     setEditingStaff(null);
   };
 
-  const handleDeleteStaff = (id) => {
+  const requestDeleteStaff = (staff) => {
+    setStaffToDelete(staff);
+  };
+
+  const confirmDeleteStaff = () => {
+    if (!staffToDelete) return;
+    const id = staffToDelete.id;
     const newStaffList = staffList.filter(s => s.id !== id);
     
     // Cascading delete: remove from all schedules
@@ -290,6 +305,7 @@ export default function App() {
 
     updateDb('staffList', newStaffList);
     updateDb('schedulesByWeek', newSchedules);
+    setStaffToDelete(null);
   };
 
   const toggleSkill = (skill) => {
@@ -315,7 +331,13 @@ export default function App() {
     setEditingRoom(null);
   };
 
-  const handleDeleteRoom = (id) => {
+  const requestDeleteRoom = (room) => {
+    setRoomToDelete(room);
+  };
+
+  const confirmDeleteRoom = () => {
+    if (!roomToDelete) return;
+    const id = roomToDelete.id;
     const newRoomList = roomList.filter(r => r.id !== id);
     
     // Cascading delete: remove shifts associated with room
@@ -330,6 +352,7 @@ export default function App() {
 
     updateDb('roomList', newRoomList);
     updateDb('schedulesByWeek', newSchedules);
+    setRoomToDelete(null);
   };
 
   // --- UI Helpers ---
@@ -721,12 +744,12 @@ export default function App() {
       {/* MODAL: Manage Staff */}
       {isManagingStaff && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-xl shadow-xl w-[500px] max-w-[90vw] max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-[500px] max-w-[90vw] max-h-[90vh] flex flex-col relative">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <h3 className="text-lg font-bold">
                 {editingStaff ? (editingStaff.id ? 'Edit Staff' : 'Add New Staff') : 'Manage Staff'}
               </h3>
-              <button onClick={() => { setIsManagingStaff(false); setEditingStaff(null); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setIsManagingStaff(false); setEditingStaff(null); setStaffToDelete(null); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -757,7 +780,7 @@ export default function App() {
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => handleDeleteStaff(staff.id)}
+                            onClick={() => requestDeleteStaff(staff)}
                             className="p-1.5 text-slate-500 hover:text-red-600 rounded bg-white border border-slate-200 shadow-sm transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -813,6 +836,31 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Deletion Confirmation Overlay for Staff */}
+            {staffToDelete && (
+              <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-6 text-center z-10 rounded-xl backdrop-blur-sm">
+                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                <h4 className="text-lg font-bold mb-2">Delete Staff Member?</h4>
+                <p className="text-sm text-slate-600 mb-6">
+                  Are you sure you want to delete <strong>{staffToDelete.name}</strong>? This will remove them and all their scheduled shifts from your rotas.
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button 
+                    onClick={confirmDeleteStaff} 
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button 
+                    onClick={() => setStaffToDelete(null)} 
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -820,12 +868,12 @@ export default function App() {
       {/* MODAL: Manage Rooms */}
       {isManagingRooms && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-xl shadow-xl w-[400px] max-w-[90vw] max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-[400px] max-w-[90vw] max-h-[90vh] flex flex-col relative">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <h3 className="text-lg font-bold">
                 {editingRoom ? (editingRoom.id ? 'Edit Room' : 'Add New Room') : 'Manage Rooms'}
               </h3>
-              <button onClick={() => { setIsManagingRooms(false); setEditingRoom(null); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setIsManagingRooms(false); setEditingRoom(null); setRoomToDelete(null); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -851,7 +899,7 @@ export default function App() {
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => handleDeleteRoom(room.id)}
+                            onClick={() => requestDeleteRoom(room)}
                             className="p-1.5 text-slate-500 hover:text-red-600 rounded bg-white border border-slate-200 shadow-sm transition-colors"
                             title="Delete Room"
                           >
@@ -892,6 +940,31 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Deletion Confirmation Overlay for Rooms */}
+            {roomToDelete && (
+              <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-6 text-center z-10 rounded-xl backdrop-blur-sm">
+                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                <h4 className="text-lg font-bold mb-2">Delete Room?</h4>
+                <p className="text-sm text-slate-600 mb-6">
+                  Are you sure you want to delete <strong>{roomToDelete.name}</strong>? This will completely remove the room and empty any shifts assigned to it.
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button 
+                    onClick={confirmDeleteRoom} 
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button 
+                    onClick={() => setRoomToDelete(null)} 
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
