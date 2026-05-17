@@ -67,6 +67,14 @@ const INITIAL_TARGETS = {
   'Immunisations': 3
 };
 
+const INITIAL_CLINIC_COLORS = {
+  'Minor Illness': '#c084fc', // Purple
+  'Chronic Disease': '#fb923c', // Orange
+  'Bloods': '#f87171', // Red
+  'Smears': '#f472b6', // Pink
+  'Immunisations': '#2dd4bf' // Teal
+};
+
 export default function App() {
   // --- Firebase & Auth State ---
   const [user, setUser] = useState(null);
@@ -74,6 +82,7 @@ export default function App() {
 
   // --- Core Data State ---
   const [targets, setTargets] = useState(INITIAL_TARGETS);
+  const [clinicColors, setClinicColors] = useState(INITIAL_CLINIC_COLORS);
   const [staffList, setStaffList] = useState(INITIAL_STAFF);
   const [roomList, setRoomList] = useState(INITIAL_ROOMS);
   const [schedulesByWeek, setSchedulesByWeek] = useState({ 'master': {} });
@@ -90,6 +99,7 @@ export default function App() {
   const [isEditingTargets, setIsEditingTargets] = useState(false);
   const [newClinicName, setNewClinicName] = useState('');
   const [newClinicTarget, setNewClinicTarget] = useState(1);
+  const [newClinicColor, setNewClinicColor] = useState('#3b82f6');
   const [clinicToDelete, setClinicToDelete] = useState(null);
   
   const [isManagingStaff, setIsManagingStaff] = useState(false);
@@ -134,6 +144,7 @@ export default function App() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.targets) setTargets(data.targets);
+          if (data.clinicColors) setClinicColors(data.clinicColors);
           if (data.staffList) setStaffList(data.staffList);
           if (data.roomList) setRoomList(data.roomList);
           if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
@@ -141,6 +152,7 @@ export default function App() {
           // Initialize new database entry with defaults
           setDoc(docRef, {
             targets: INITIAL_TARGETS,
+            clinicColors: INITIAL_CLINIC_COLORS,
             staffList: INITIAL_STAFF,
             roomList: INITIAL_ROOMS,
             schedulesByWeek: { 'master': {} }
@@ -166,6 +178,7 @@ export default function App() {
     // Optimistic UI update (makes app feel instantly responsive)
     if (field === 'schedulesByWeek') setSchedulesByWeek(value);
     if (field === 'targets') setTargets(value);
+    if (field === 'clinicColors') setClinicColors(value);
     if (field === 'staffList') setStaffList(value);
     if (field === 'roomList') setRoomList(value);
 
@@ -252,11 +265,18 @@ export default function App() {
     }
   };
 
+  const handleUpdateTargetColor = (clinic, newColor) => {
+    updateDb('clinicColors', {...clinicColors, [clinic]: newColor});
+  };
+
   const handleAddClinic = () => {
     if (newClinicName.trim() && !targets[newClinicName.trim()]) {
-      updateDb('targets', {...targets, [newClinicName.trim()]: parseInt(newClinicTarget) || 1});
+      const name = newClinicName.trim();
+      updateDb('targets', {...targets, [name]: parseInt(newClinicTarget) || 1});
+      updateDb('clinicColors', {...clinicColors, [name]: newClinicColor});
       setNewClinicName('');
       setNewClinicTarget(1);
+      setNewClinicColor('#3b82f6');
     }
   };
 
@@ -268,7 +288,10 @@ export default function App() {
     if (!clinicToDelete) return;
     const newTargets = { ...targets };
     delete newTargets[clinicToDelete];
+    const newColors = { ...clinicColors };
+    delete newColors[clinicToDelete];
     updateDb('targets', newTargets);
+    updateDb('clinicColors', newColors);
     setClinicToDelete(null);
   };
 
@@ -417,7 +440,10 @@ export default function App() {
               return (
                 <div key={clinic} className={`p-2 rounded-lg border ${colorClass}`}>
                   <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-xs truncate mr-2">{clinic}</span>
+                    <span className="font-semibold text-xs truncate mr-2 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: clinicColors[clinic] || '#3b82f6' }}></span>
+                      {clinic}
+                    </span>
                     <span className="text-xs font-bold whitespace-nowrap">{current} / {target}</span>
                   </div>
                   <div className="w-full bg-white/50 rounded-full h-1.5">
@@ -554,6 +580,7 @@ export default function App() {
                         assignment={currentSchedule[`${room.id}-${day}-AM`]} 
                         onClick={() => handleCellClick(room.id, day, 'AM')}
                         getStaffName={getStaffName}
+                        clinicColor={currentSchedule[`${room.id}-${day}-AM`] ? clinicColors[currentSchedule[`${room.id}-${day}-AM`].clinic] : null}
                       />
                     </td>
                     <td className="p-1 border-r border-slate-200 align-top">
@@ -562,6 +589,7 @@ export default function App() {
                         assignment={currentSchedule[`${room.id}-${day}-PM`]} 
                         onClick={() => handleCellClick(room.id, day, 'PM')}
                         getStaffName={getStaffName}
+                        clinicColor={currentSchedule[`${room.id}-${day}-PM`] ? clinicColors[currentSchedule[`${room.id}-${day}-PM`].clinic] : null}
                       />
                     </td>
                   </React.Fragment>
@@ -695,6 +723,15 @@ export default function App() {
               {clinicTypes.map(clinic => (
                 <div key={clinic} className="flex items-center justify-between gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
                   <span className="font-medium text-sm flex-1 truncate">{clinic}</span>
+                  <div className="relative rounded overflow-hidden border border-slate-300 w-7 h-7 shrink-0 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500 hover:scale-105 transition-transform">
+                    <input 
+                      type="color"
+                      value={clinicColors[clinic] || '#3b82f6'}
+                      onChange={(e) => handleUpdateTargetColor(clinic, e.target.value)}
+                      className="absolute -top-2 -left-2 w-12 h-12 cursor-pointer"
+                      title="Clinic Colour"
+                    />
+                  </div>
                   <input 
                     type="number" 
                     min="0"
@@ -718,14 +755,23 @@ export default function App() {
                 <input 
                   type="text" 
                   placeholder="Clinic Name"
-                  className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500"
+                  className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 min-w-0"
                   value={newClinicName}
                   onChange={(e) => setNewClinicName(e.target.value)}
                 />
+                <div className="relative rounded-lg overflow-hidden border border-slate-300 w-10 h-10 shrink-0 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500 hover:scale-105 transition-transform">
+                  <input 
+                    type="color"
+                    value={newClinicColor}
+                    onChange={(e) => setNewClinicColor(e.target.value)}
+                    className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
+                    title="New Clinic Colour"
+                  />
+                </div>
                 <input 
                   type="number" 
                   min="1"
-                  className="w-16 p-2 border border-slate-300 rounded-lg text-center text-sm outline-none focus:border-blue-500"
+                  className="w-16 p-2 border border-slate-300 rounded-lg text-center text-sm outline-none focus:border-blue-500 shrink-0"
                   value={newClinicTarget}
                   onChange={(e) => setNewClinicTarget(e.target.value)}
                 />
@@ -1025,7 +1071,7 @@ export default function App() {
   );
 }
 
-function AssignmentCell({ assignment, onClick, getStaffName }) {
+function AssignmentCell({ assignment, onClick, getStaffName, clinicColor }) {
   if (!assignment) {
     return (
       <button 
@@ -1037,26 +1083,19 @@ function AssignmentCell({ assignment, onClick, getStaffName }) {
     );
   }
 
-  const getClinicColor = (clinic) => {
-    switch(clinic) {
-      case 'Minor Illness': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Chronic Disease': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Bloods': return 'bg-red-100 text-red-800 border-red-200';
-      case 'Smears': return 'bg-pink-100 text-pink-800 border-pink-200';
-      case 'Immunisations': return 'bg-teal-100 text-teal-800 border-teal-200';
-      default: return 'bg-blue-100 text-blue-800 border-blue-200';
-    }
-  };
+  // Use the assigned colour, or fallback to default blue
+  const safeColor = clinicColor || '#3b82f6';
 
   return (
     <div 
       onClick={onClick}
-      className={`w-full h-16 p-1.5 rounded-md border cursor-pointer hover:shadow-md transition-shadow flex flex-col justify-center ${getClinicColor(assignment.clinic)} print:border-slate-300`}
+      className="w-full h-16 p-1.5 rounded-md border cursor-pointer hover:shadow-md transition-shadow flex flex-col justify-center print:border-slate-300"
+      style={{ backgroundColor: `${safeColor}33`, borderColor: safeColor }}
     >
-      <div className="font-bold text-[10px] uppercase tracking-wider truncate mb-0.5 print:text-black">
+      <div className="font-bold text-[10px] uppercase tracking-wider truncate mb-0.5 text-slate-900 print:text-black">
         {assignment.clinic}
       </div>
-      <div className="text-xs flex items-center gap-1 opacity-90 truncate print:text-black">
+      <div className="text-xs flex items-center gap-1 opacity-90 truncate text-slate-700 print:text-black">
         <User className="w-3 h-3 shrink-0 print:text-slate-500" />
         <span className="truncate">{getStaffName(assignment.staffId)}</span>
       </div>
