@@ -1248,7 +1248,7 @@ function DashboardHome({ setView }) {
   return (
     <div className="p-8 max-w-5xl mx-auto h-full overflow-y-auto">
       <div className="mb-10">
-        <h1 className="text-3xl font-black text-slate-800">Welcome back, Matt.</h1>
+        <h1 className="text-3xl font-black text-slate-800">Welcome back, Michelle.</h1>
         <p className="text-slate-500 mt-2 text-lg">Practice Management Suite • Bourne Galletly</p>
       </div>
 
