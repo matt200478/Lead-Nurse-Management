@@ -114,8 +114,8 @@ export default function App() {
     if (!user) return;
 
     try {
-      // Secure, user-specific path
-      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
+      // Practice-wide shared path instead of user-specific path
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'clinic_rota', 'shared_data');
 
       const unsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -158,7 +158,8 @@ export default function App() {
 
     // Persist to Cloud
     try {
-      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
+      // Practice-wide shared path instead of user-specific path
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'clinic_rota', 'shared_data');
       // Use updateDoc instead of setDoc with merge to ensure deleted object keys stay deleted!
       await updateDoc(docRef, { [field]: value });
     } catch (e) {
