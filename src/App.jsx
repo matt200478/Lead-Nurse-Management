@@ -3,7 +3,7 @@ import {
   CheckCircle, AlertCircle, Plus, Trash2, User, Home, Activity, Settings, 
   X, Users, Edit2, Layout, CalendarDays, Calendar, Printer, Loader2, 
   ChevronLeft, ChevronRight, LayoutDashboard, GraduationCap, RefreshCw, 
-  Search, AlertTriangle, Clock, ShieldCheck, XCircle, UserCheck, Save
+  Search, AlertTriangle, Clock, ShieldCheck, XCircle, UserCheck, Save, Star
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
@@ -318,7 +318,7 @@ function ClinicRota() {
 
   if (!isDbLoaded) {
     return (
-      <div className="flex-1 bg-gray-50 flex flex-col items-center justify-center text-blue-600">
+      <div className="flex-1 bg-gray-50 flex flex-col items-center justify-center text-indigo-600">
         <Loader2 className="w-10 h-10 animate-spin mb-4" />
         <h2 className="text-xl font-bold text-slate-700">Loading Rota Data...</h2>
       </div>
@@ -352,10 +352,12 @@ function ClinicRota() {
               const isMet = current === target;
               const isOver = current > target;
               
-              let colorClass = "bg-slate-100 text-slate-600 border-slate-200";
-              if (isMet) colorClass = "bg-green-50 text-green-700 border-green-200";
-              else if (isOver) colorClass = "bg-red-50 text-red-700 border-red-200";
-              else if (current > 0) colorClass = "bg-blue-50 text-blue-700 border-blue-200";
+              let colorClass = "bg-rose-50 text-rose-700 border-rose-200"; // Default: Unmet
+              if (isOver) {
+                  colorClass = "bg-emerald-50 text-emerald-800 border-emerald-200"; // Exceeded
+              } else if (isMet) {
+                  colorClass = "bg-green-50 text-green-700 border-green-200"; // Met exactly
+              }
 
               return (
                 <div key={clinic} className={`p-2 rounded-lg border ${colorClass}`}>
@@ -367,8 +369,10 @@ function ClinicRota() {
                     <span className="text-xs font-bold whitespace-nowrap">{current} / {target}</span>
                   </div>
                   <div className="w-full bg-white/50 rounded-full h-1.5">
-                    <div className={`h-1.5 rounded-full ${isMet ? 'bg-green-500' : isOver ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(100, (current / target) * 100)}%` }}></div>
+                    <div className={`h-1.5 rounded-full ${isOver ? 'bg-emerald-500' : isMet ? 'bg-green-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, (current / target) * 100)}%` }}></div>
                   </div>
+                  {isMet && <p className="text-[10px] mt-1 flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Target met</p>}
+                  {isOver && <p className="text-[10px] mt-1 flex items-center gap-1"><Star className="w-3 h-3"/> Exceeded!</p>}
                 </div>
               );
             })}
@@ -1248,7 +1252,7 @@ function DashboardHome({ setView }) {
   return (
     <div className="p-8 max-w-5xl mx-auto h-full overflow-y-auto">
       <div className="mb-10">
-        <h1 className="text-3xl font-black text-slate-800">Welcome back, Michelle.</h1>
+        <h1 className="text-3xl font-black text-slate-800">Welcome back, Matt.</h1>
         <p className="text-slate-500 mt-2 text-lg">Practice Management Suite • Bourne Galletly</p>
       </div>
 
@@ -1281,33 +1285,61 @@ function DashboardHome({ setView }) {
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'rota', 'training'
+  const [isGlobalSidebarOpen, setIsGlobalSidebarOpen] = useState(true);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
       {/* Global Sidebar */}
-      <div className="w-64 bg-slate-900 text-white shrink-0 flex flex-col print:hidden shadow-xl z-50">
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center gap-3 text-indigo-400 mb-1">
-            <ShieldCheck className="w-8 h-8" />
-            <h1 className="text-xl font-black tracking-tight text-white">Practice<br/>Manager</h1>
-          </div>
+      <div className={`${isGlobalSidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 ease-in-out bg-slate-900 text-white shrink-0 flex flex-col print:hidden shadow-xl z-50 relative`}>
+        
+        {/* Sidebar Toggle Button */}
+        <button 
+          onClick={() => setIsGlobalSidebarOpen(!isGlobalSidebarOpen)}
+          className="absolute -right-3 top-8 bg-indigo-600 text-white p-1 rounded-full shadow-md hover:bg-indigo-700 z-50 border border-slate-800"
+          title={isGlobalSidebarOpen ? "Minimise Menu" : "Expand Menu"}
+        >
+          {isGlobalSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+
+        <div className={`p-6 border-b border-slate-800 flex items-center ${isGlobalSidebarOpen ? 'gap-3' : 'justify-center px-0'}`}>
+          <ShieldCheck className="w-8 h-8 text-indigo-400 shrink-0" />
+          {isGlobalSidebarOpen && (
+            <h1 className="text-xl font-black tracking-tight text-white whitespace-nowrap overflow-hidden">Practice<br/>Manager</h1>
+          )}
         </div>
         
-        <div className="flex-1 py-6 flex flex-col gap-2 px-4">
-          <button onClick={() => setCurrentView('dashboard')} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <LayoutDashboard className="w-5 h-5" /> Home
+        <div className="flex-1 py-6 flex flex-col gap-2 px-4 overflow-hidden">
+          <button 
+            onClick={() => setCurrentView('dashboard')} 
+            title="Home"
+            className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            <LayoutDashboard className="w-5 h-5 shrink-0" />
+            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Home</span>}
           </button>
-          <button onClick={() => setCurrentView('rota')} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${currentView === 'rota' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <CalendarDays className="w-5 h-5" /> Clinic Rota
+          <button 
+            onClick={() => setCurrentView('rota')} 
+            title="Clinic Rota"
+            className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'rota' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            <CalendarDays className="w-5 h-5 shrink-0" />
+            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Clinic Rota</span>}
           </button>
-          <button onClick={() => setCurrentView('training')} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${currentView === 'training' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <GraduationCap className="w-5 h-5" /> Training Matrix
+          <button 
+            onClick={() => setCurrentView('training')} 
+            title="Training Matrix"
+            className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'training' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            <GraduationCap className="w-5 h-5 shrink-0" />
+            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Training Matrix</span>}
           </button>
         </div>
 
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-          Bourne Galletly Internal Tools
-        </div>
+        {isGlobalSidebarOpen && (
+          <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center whitespace-nowrap">
+            Bourne Galletly Internal Tools
+          </div>
+        )}
       </div>
 
       {/* Main Content Area */}
