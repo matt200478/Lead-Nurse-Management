@@ -42,10 +42,10 @@ const getRotaDocRef = () => {
 
 // --- Sample/Default Data ---
 const INITIAL_ROOMS = [
-  { id: 1, name: 'Room 1' },
-  { id: 2, name: 'Room 2' },
-  { id: 3, name: 'Room 3' },
-  { id: 4, name: 'Treatment Room' }
+  { id: 1, name: 'Room 1', color: '#3b82f6' }, // Blue
+  { id: 2, name: 'Room 2', color: '#14b8a6' }, // Teal
+  { id: 3, name: 'Room 3', color: '#ef4444' }, // Red
+  { id: 4, name: 'Treatment Room', color: '#a855f7' } // Purple
 ];
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEKENDS = ['Saturday', 'Sunday'];
@@ -517,7 +517,10 @@ export default function App() {
           <tbody>
             {roomList.map(room => (
               <tr key={room.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="p-3 font-medium text-sm sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                <td 
+                  className="p-3 font-medium text-sm sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:border-l-0"
+                  style={{ borderLeft: `4px solid ${room.color || '#e2e8f0'}` }}
+                >
                   {room.name}
                 </td>
                 {activeDays.map(day => (
@@ -882,7 +885,7 @@ export default function App() {
               {!editingRoom ? (
                 <div className="space-y-4">
                   <button 
-                    onClick={() => setEditingRoom({ name: '' })}
+                    onClick={() => setEditingRoom({ name: '', color: '#3b82f6' })}
                     className="w-full py-2 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 font-medium transition-colors border border-blue-200"
                   >
                     <Plus className="w-4 h-4" /> Add New Room
@@ -890,7 +893,10 @@ export default function App() {
                   <div className="space-y-2">
                     {roomList.map(room => (
                       <div key={room.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg bg-slate-50">
-                        <div className="font-medium text-sm text-slate-800">{room.name}</div>
+                        <div className="font-medium text-sm text-slate-800 flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: room.color || '#e2e8f0' }}></span>
+                          {room.name}
+                        </div>
                         <div className="flex gap-2">
                           <button 
                             onClick={() => setEditingRoom(room)}
@@ -921,6 +927,30 @@ export default function App() {
                       placeholder="e.g. Room 4 or Minor Ops"
                       className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Room Colour</label>
+                    <div className="flex items-center gap-2">
+                      {['#3b82f6', '#14b8a6', '#ef4444', '#a855f7', '#f59e0b', '#ec4899'].map(c => (
+                        <button
+                          key={c}
+                          onClick={() => setEditingRoom({...editingRoom, color: c})}
+                          className={`w-6 h-6 rounded-full border-2 transition-all ${editingRoom.color === c ? 'border-slate-800 scale-110' : 'border-transparent hover:scale-110'}`}
+                          style={{ backgroundColor: c }}
+                          title="Preset Colour"
+                        />
+                      ))}
+                      <div className="w-px h-6 bg-slate-300 mx-1"></div>
+                      <div className="relative rounded overflow-hidden border border-slate-300 w-8 h-8 focus-within:ring-2 focus-within:ring-blue-500 hover:scale-105 transition-transform cursor-pointer">
+                        <input
+                          type="color"
+                          value={editingRoom.color || '#3b82f6'}
+                          onChange={(e) => setEditingRoom({...editingRoom, color: e.target.value})}
+                          className="absolute -top-2 -left-2 w-12 h-12 cursor-pointer"
+                          title="Custom Colour Picker"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex gap-2 pt-4">
                     <button 
