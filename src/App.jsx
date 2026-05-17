@@ -26,7 +26,9 @@ try {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
+
+// Fix: Ensure the App ID never contains slashes which break Firebase Document Paths
+const appId = typeof __app_id !== 'undefined' ? String(__app_id).split('/')[0] : 'rota-manager-app';
 
 // --- Sample/Default Data ---
 const INITIAL_ROOMS = [
@@ -73,9 +75,12 @@ export default function App() {
   const [newWeekDate, setNewWeekDate] = useState('');
   const [selectedCell, setSelectedCell] = useState(null); 
   const [formState, setFormState] = useState({ staffId: '', clinic: '' });
+  
   const [isEditingTargets, setIsEditingTargets] = useState(false);
   const [newClinicName, setNewClinicName] = useState('');
   const [newClinicTarget, setNewClinicTarget] = useState(1);
+  const [clinicToDelete, setClinicToDelete] = useState(null);
+  
   const [isManagingStaff, setIsManagingStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [isManagingRooms, setIsManagingRooms] = useState(false);
@@ -108,32 +113,37 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Secure, user-specific path
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
+    try {
+      // Secure, user-specific path
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
 
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.targets) setTargets(data.targets);
-        if (data.staffList) setStaffList(data.staffList);
-        if (data.roomList) setRoomList(data.roomList);
-        if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
-      } else {
-        // Initialize new user with defaults
-        setDoc(docRef, {
-          targets: INITIAL_TARGETS,
-          staffList: INITIAL_STAFF,
-          roomList: INITIAL_ROOMS,
-          schedulesByWeek: { 'master': {} }
-        }, { merge: true });
-      }
+      const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.targets) setTargets(data.targets);
+          if (data.staffList) setStaffList(data.staffList);
+          if (data.roomList) setRoomList(data.roomList);
+          if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
+        } else {
+          // Initialize new user with defaults
+          setDoc(docRef, {
+            targets: INITIAL_TARGETS,
+            staffList: INITIAL_STAFF,
+            roomList: INITIAL_ROOMS,
+            schedulesByWeek: { 'master': {} }
+          }, { merge: true });
+        }
+        setIsDbLoaded(true);
+      }, (error) => {
+        console.error("Sync error:", error);
+        setIsDbLoaded(true); 
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Error setting up snapshot:", e);
       setIsDbLoaded(true);
-    }, (error) => {
-      console.error("Sync error:", error);
-      setIsDbLoaded(true); 
-    });
-
-    return () => unsubscribe();
+    }
   }, [user]);
 
   // --- Database Updater Helper ---
@@ -147,8 +157,8 @@ export default function App() {
     if (field === 'roomList') setRoomList(value);
 
     // Persist to Cloud
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
     try {
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
       await setDoc(docRef, { [field]: value }, { merge: true });
     } catch (e) {
       console.error("Failed to save to database:", e);
@@ -158,7 +168,7 @@ export default function App() {
   // --- Calculations ---
   const currentCounts = useMemo(() => {
     const counts = {};
-    clinicTypes.forEach(type => counts[type] = 0);
+    Object.keys(targets).forEach(type => counts[type] = 0);
     Object.values(currentSchedule).forEach(assignment => {
       if (assignment.clinic) {
         if (counts[assignment.clinic] === undefined) {
@@ -168,7 +178,7 @@ export default function App() {
       }
     });
     return counts;
-  }, [currentSchedule, targets, clinicTypes]);
+  }, [currentSchedule, targets]);
 
   // --- Handlers ---
   const handleCellClick = (roomId, day, slot) => {
@@ -237,10 +247,16 @@ export default function App() {
     }
   };
 
-  const handleDeleteTarget = (clinic) => {
+  const requestDeleteTarget = (clinic) => {
+    setClinicToDelete(clinic);
+  };
+
+  const confirmDeleteTarget = () => {
+    if (!clinicToDelete) return;
     const newTargets = { ...targets };
-    delete newTargets[clinic];
+    delete newTargets[clinicToDelete];
     updateDb('targets', newTargets);
+    setClinicToDelete(null);
   };
 
   const handleSaveStaff = () => {
@@ -616,10 +632,10 @@ export default function App() {
       {/* MODAL: Manage Targets */}
       {isEditingTargets && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-96 max-w-[90vw] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-96 max-w-[90vw] max-h-[90vh] overflow-y-auto relative">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Manage Clinic Targets</h3>
-              <button onClick={() => setIsEditingTargets(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setIsEditingTargets(false); setClinicToDelete(null); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -636,7 +652,7 @@ export default function App() {
                     onChange={(e) => handleUpdateTarget(clinic, e.target.value)}
                   />
                   <button 
-                    onClick={() => handleDeleteTarget(clinic)}
+                    onClick={() => requestDeleteTarget(clinic)}
                     className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -671,6 +687,31 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Deletion Confirmation Overlay */}
+            {clinicToDelete && (
+              <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-6 text-center z-10 rounded-xl backdrop-blur-sm">
+                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                <h4 className="text-lg font-bold mb-2">Delete Clinic?</h4>
+                <p className="text-sm text-slate-600 mb-6">
+                  Are you sure you want to delete <strong>{clinicToDelete}</strong>? This will remove it from your targets.
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button 
+                    onClick={confirmDeleteTarget} 
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button 
+                    onClick={() => setClinicToDelete(null)} 
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
