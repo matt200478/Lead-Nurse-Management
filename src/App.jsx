@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { CheckCircle, AlertCircle, Plus, Trash2, User, Home, Activity, Settings, X, Users, Edit2, Layout, CalendarDays, Calendar, Printer, Loader2 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 // --- Firebase Initialization ---
 // NOTE FOR NETLIFY DEPLOYMENT: 
@@ -159,7 +159,8 @@ export default function App() {
     // Persist to Cloud
     try {
       const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'rota');
-      await setDoc(docRef, { [field]: value }, { merge: true });
+      // Use updateDoc instead of setDoc with merge to ensure deleted object keys stay deleted!
+      await updateDoc(docRef, { [field]: value });
     } catch (e) {
       console.error("Failed to save to database:", e);
     }
