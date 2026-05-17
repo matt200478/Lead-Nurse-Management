@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Plus, Trash2, User, Home, Activity, Settings, X, Users, Edit2, Layout, CalendarDays, Calendar, Printer, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Plus, Trash2, User, Home, Activity, Settings, X, Users, Edit2, Layout, CalendarDays, Calendar, Printer, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -99,6 +99,7 @@ export default function App() {
   const [editingRoom, setEditingRoom] = useState(null);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [showWeekends, setShowWeekends] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const activeDays = showWeekends ? [...WEEKDAYS, ...WEEKENDS] : WEEKDAYS;
   const currentSchedule = schedulesByWeek[activeWeek] || {};
@@ -374,57 +375,78 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 font-sans text-slate-800 flex flex-col md:flex-row gap-6 print:bg-white print:p-0 print:block">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 font-sans text-slate-800 flex flex-col md:flex-row gap-4 md:gap-6 print:bg-white print:p-0 print:block">
       
       {/* LEFT PANEL: Tracker */}
-      <div className="w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 p-5 h-fit sticky top-6 print:hidden">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            Weekly Targets
-          </h2>
-          <button 
-            onClick={() => setIsEditingTargets(true)}
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-            title="Manage Targets"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="space-y-4">
-          {clinicTypes.map(clinic => {
-            const target = targets[clinic];
-            const current = currentCounts[clinic] || 0;
-            const isMet = current === target;
-            const isOver = current > target;
-            
-            let colorClass = "bg-slate-100 text-slate-600 border-slate-200";
-            if (isMet) colorClass = "bg-green-50 text-green-700 border-green-200";
-            else if (isOver) colorClass = "bg-red-50 text-red-700 border-red-200";
-            else if (current > 0) colorClass = "bg-blue-50 text-blue-700 border-blue-200";
+      {isSidebarOpen ? (
+        <div className="w-full md:w-64 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-fit sticky top-6 print:hidden transition-all">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-base font-bold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-blue-600" />
+              Weekly Targets
+            </h2>
+            <div className="flex gap-1">
+              <button 
+                onClick={() => setIsEditingTargets(true)}
+                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                title="Manage Targets"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                title="Minimise Sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {clinicTypes.map(clinic => {
+              const target = targets[clinic];
+              const current = currentCounts[clinic] || 0;
+              const isMet = current === target;
+              const isOver = current > target;
+              
+              let colorClass = "bg-slate-100 text-slate-600 border-slate-200";
+              if (isMet) colorClass = "bg-green-50 text-green-700 border-green-200";
+              else if (isOver) colorClass = "bg-red-50 text-red-700 border-red-200";
+              else if (current > 0) colorClass = "bg-blue-50 text-blue-700 border-blue-200";
 
-            return (
-              <div key={clinic} className={`p-3 rounded-lg border ${colorClass}`}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-sm">{clinic}</span>
-                  <span className="text-sm font-bold">{current} / {target}</span>
+              return (
+                <div key={clinic} className={`p-2 rounded-lg border ${colorClass}`}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-semibold text-xs truncate mr-2">{clinic}</span>
+                    <span className="text-xs font-bold whitespace-nowrap">{current} / {target}</span>
+                  </div>
+                  <div className="w-full bg-white/50 rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full ${isMet ? 'bg-green-500' : isOver ? 'bg-red-500' : 'bg-blue-500'}`} 
+                      style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-white/50 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${isMet ? 'bg-green-500' : isOver ? 'bg-red-500' : 'bg-blue-500'}`} 
-                    style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
-                  ></div>
-                </div>
-                {isMet && <p className="text-xs mt-1 flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Target met</p>}
-                {isOver && <p className="text-xs mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Over-scheduled!</p>}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div 
+          onClick={() => setIsSidebarOpen(true)}
+          className="w-full md:w-12 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col items-center py-4 h-fit sticky top-6 print:hidden cursor-pointer hover:bg-slate-50 transition-colors group"
+          title="Expand Targets"
+        >
+          <Activity className="w-5 h-5 text-blue-600 mb-4 group-hover:scale-110 transition-transform" />
+          <div style={{ writingMode: 'vertical-rl' }} className="text-xs font-bold text-slate-400 tracking-widest uppercase mb-4">
+            Targets
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+        </div>
+      )}
 
       {/* MAIN PANEL: Schedule Grid */}
-      <div className="w-full md:w-3/4 bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-x-auto flex flex-col print:w-full print:border-none print:shadow-none print:p-0 print:overflow-visible">
+      <div className="flex-1 min-w-0 bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-5 overflow-x-auto flex flex-col print:w-full print:border-none print:shadow-none print:p-0 print:overflow-visible">
         
         {/* Header & Controls */}
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-4">
