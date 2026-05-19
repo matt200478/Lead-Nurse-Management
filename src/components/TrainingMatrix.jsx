@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, 
+  GraduationCap, Search, Download, Printer, BookOpen, Activity, 
   UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, 
-  Clock, X, Plus, Trash2, Edit2, ClipboardList, Layers, FileText, Check 
+  Clock, X, Plus, Trash2, Edit2, ClipboardList, Layers, FileText, Check,
+  CheckSquare, CalendarDays, Hourglass
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -18,7 +19,7 @@ export default function TrainingMatrix() {
     const [staffList, setStaffList] = useState([]); 
 
     // Layout Navigation & Search Filter States
-    const [activeTab, setActiveTab] = useState('matrix'); // Options: matrix, log, schedule, bulk, remarks, manage
+    const [activeTab, setActiveTab] = useState('matrix'); 
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -37,16 +38,10 @@ export default function TrainingMatrix() {
     const [selectedCell, setSelectedCell] = useState(null);
     const [cellForm, setCellForm] = useState({ date: '', override: 'Completed' });
 
-    // Single Log Feature State
+    // Forms State
     const [singleLog, setSingleLog] = useState({ staffId: '', courseName: '', date: '' });
-    
-    // Future Schedule Feature State
     const [scheduleLog, setScheduleLog] = useState({ staffId: '', courseName: '', date: '' });
-
-    // Bulk Action Feature State
     const [bulkLog, setBulkLog] = useState({ courseName: '', date: '', selectedStaffIds: [] });
-
-    // General Staff Remarks Editing State
     const [selectedRemarksStaffId, setSelectedRemarksStaffId] = useState('');
     const [remarksText, setRemarksText] = useState('');
 
@@ -94,7 +89,6 @@ export default function TrainingMatrix() {
         catch (e) { console.error("Database save failed:", e); }
     };
 
-    // Main automated status calculator running live evaluations against dates
     const calculateCellStatus = (record, courseFreq) => {
         if (!record || (!record.date && record.override !== 'N/A')) return { status: 'Expired/Missing' };
         if (record.override === 'N/A') return { status: 'N/A' };
@@ -104,12 +98,10 @@ export default function TrainingMatrix() {
         const eventDate = new Date(record.date);
         eventDate.setHours(0,0,0,0);
 
-        // Smart dynamic evaluations for active/pending workflows
         if (record.override === 'Booked') {
             if (eventDate > today) {
                 return { status: 'Booked', date: record.date };
             } else {
-                // If the scheduled training day passes but has no completion input, alert supervisor verification
                 return { status: 'Awaiting Approval', date: record.date };
             }
         }
@@ -129,7 +121,32 @@ export default function TrainingMatrix() {
         return { status, date: record.date, expiry: expiryDate.toISOString().split('T')[0] };
     };
 
-    // Approval function promoting passed-date bookings into historical completions
+    // Calculate items needing approval
+    const approvalRequiredItems = useMemo(() => {
+        const items = [];
+        staffList.filter(s => s.status !== 'Archived').forEach(staff => {
+            Object.keys(staff.records || {}).forEach(cName => {
+                const record = staff.records[cName];
+                if (record && record.override === 'Booked') {
+                    const eventDate = new Date(record.date);
+                    eventDate.setHours(0,0,0,0);
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    if (eventDate <= today) {
+                        items.push({
+                            staffId: staff.id,
+                            staffName: staff.name,
+                            courseName: cName,
+                            date: record.date
+                        });
+                    }
+                }
+            });
+        });
+        return items;
+    }, [staffList]);
+
     const handleApproveTraining = async (staffId, courseName, passedDate) => {
         const newStaffList = staffList.map(staff => {
             if (staff.id === staffId) {
@@ -370,6 +387,15 @@ export default function TrainingMatrix() {
         }
     };
 
+    const TABS = [
+        { id: 'matrix', label: 'Matrix Grid', icon: ClipboardList },
+        { id: 'log', label: 'Log Completion', icon: CheckSquare },
+        { id: 'bulk', label: 'Bulk Log', icon: Layers },
+        { id: 'schedule', label: 'Schedule Course', icon: CalendarDays },
+        { id: 'progress', label: 'In Progress', icon: Hourglass, badge: approvalRequiredItems.length },
+        { id: 'remarks', label: 'Remarks', icon: FileText }
+    ];
+
     if (!isDbLoaded) {
         return (
             <div className="flex-1 bg-slate-50 flex items-center justify-center text-indigo-600">
@@ -382,25 +408,6 @@ export default function TrainingMatrix() {
     if (!showArchived) filteredData = filteredData.filter(item => item.status !== 'Archived');
     if (filter !== 'All') filteredData = filteredData.filter(item => item.role && item.role.includes(filter));
     if (searchQuery) filteredData = filteredData.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    // Extract all items requiring authorization approval across the workforce
-    const approvalRequiredItems = [];
-    staffList.filter(s => s.status !== 'Archived').forEach(staff => {
-        Object.keys(staff.records || {}).forEach(cName => {
-            const course = courses.find(c => c.name === cName);
-            if (course) {
-                const calculated = calculateCellStatus(staff.records[cName], course.freq);
-                if (calculated.status === 'Awaiting Approval') {
-                    approvalRequiredItems.push({
-                        staffId: staff.id,
-                        staffName: staff.name,
-                        courseName: cName,
-                        date: calculated.date
-                    });
-                }
-            }
-        });
-    });
 
     if (sortConfig.key) {
         filteredData.sort((a, b) => {
@@ -432,98 +439,240 @@ export default function TrainingMatrix() {
         });
     });
     const complianceRate = totalApplicable > 0 ? Math.round((totalValid / totalApplicable) * 100) : 100;
-
     const assignableStaff = staffList.filter(s => s.status !== 'Archived');
 
     return (
         <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 print:bg-white print:p-0">
-            {/* Horizontal Workflow Toolbar Navigation Menu */}
-            <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-wrap gap-2 print:hidden shadow-sm">
-                <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'matrix' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    <ClipboardList className="w-4 h-4" /> Training Matrix Grid
-                </button>
-                <button onClick={() => setActiveTab('log')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'log' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    <CheckCircle className="w-4 h-4" /> Log Completed Course
-                </button>
-                <button onClick={() => setActiveTab('schedule')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'schedule' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    <Clock className="w-4 h-4" /> Schedule Future Course
-                </button>
-                <button onClick={() => setActiveTab('bulk')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'bulk' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    <Layers className="w-4 h-4" /> Bulk Log Multi-Staff
-                </button>
-                <button onClick={() => setActiveTab('remarks')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'remarks' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    <FileText className="w-4 h-4" /> Remarks & Notes
-                </button>
-            </div>
-
             <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 shadow-sm print:hidden">
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 max-w-7xl mx-auto">
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-                            <GraduationCap className="w-7 h-7 text-indigo-600" />
-                            Training & Compliance Hub
-                        </h1>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Live Clinical Database Coordination</p>
+                <div className="max-w-7xl mx-auto">
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2 mb-4">
+                        <GraduationCap className="w-7 h-7 text-[#5c4ce5]" />
+                        Training Requirements Matrix
+                    </h1>
+                    
+                    {/* Horizontal Workflow Toolbar Navigation Menu */}
+                    <div className="bg-[#f0f2f5] p-2 rounded-xl flex flex-wrap gap-1 border border-slate-200">
+                        {TABS.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all ${activeTab === tab.id ? 'bg-white text-[#5c4ce5] shadow-sm ring-1 ring-slate-200/60' : 'text-slate-600 hover:bg-slate-200/50'}`}
+                            >
+                                <tab.icon className="w-4 h-4" /> {tab.label}
+                                {tab.badge > 0 && (
+                                    <span className="ml-1 bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{tab.badge}</span>
+                                )}
+                            </button>
+                        ))}
                     </div>
-                    {activeTab === 'matrix' && (
-                        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
-                            <div className="relative flex-1 min-w-[200px] xl:w-64">
-                                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Find staff member..." 
-                                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                />
-                            </div>
-                            <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 rounded-lg font-medium shadow-sm transition-all">
-                                <Download className="w-4 h-4" /> Export
-                            </button>
-                            <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 rounded-lg font-medium shadow-sm transition-all">
-                                <Printer className="w-4 h-4" /> Print
-                            </button>
-                            <button onClick={() => setIsManagingCourses(true)} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium shadow-sm transition-all">
-                                <BookOpen className="w-4 h-4" /> Requirements
-                            </button>
-                        </div>
-                    )}
                 </div>
             </div>
 
-            <div className="p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-full">
-                
-                {/* Supervisor Awaiting Approval Section Notifications */}
-                {approvalRequiredItems.length > 0 && (
-                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4 shadow-sm print:hidden">
-                        <h3 className="text-sm font-black text-purple-900 flex items-center gap-2 mb-2">
-                            <AlertCircle className="w-4 h-4 animate-bounce text-purple-600" />
-                            Awaiting Training Completion Verification ({approvalRequiredItems.length})
-                        </h3>
-                        <p className="text-xs text-purple-700 mb-3">The schedule date for these items has passed. Verify completion to update the matrix:</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {approvalRequiredItems.map((item, idx) => (
-                                <div key={idx} className="bg-white border border-purple-100 rounded-lg p-3 flex justify-between items-center shadow-xs">
-                                    <div>
-                                        <div className="font-bold text-xs text-slate-900">{item.staffName}</div>
-                                        <div className="text-[11px] text-slate-600 font-medium">{item.courseName}</div>
-                                        <div className="text-[10px] text-purple-600 font-bold mt-0.5">Date: {new Date(item.date).toLocaleDateString('en-GB')}</div>
-                                    </div>
-                                    <button 
-                                        onClick={() => handleApproveTraining(item.staffId, item.courseName, item.date)}
-                                        className="flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-md transition-colors"
-                                    >
-                                        <Check className="w-3 h-3" /> Approve
-                                    </button>
+            <div className="p-6 max-w-7xl mx-auto print:p-0 print:max-w-full">
+
+                {/* LOG COMPLETED COURSE TAB */}
+                {activeTab === 'log' && (
+                    <div className="max-w-3xl bg-white p-8 border border-slate-200 rounded-xl shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1">Log Completed Course</h2>
+                        <p className="text-sm text-slate-500 mb-8">Instantly update a staff member's record. This automatically clears any pending bookings for this course.</p>
+                        
+                        <form onSubmit={handleSingleLogSubmit} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Staff Member</label>
+                                    <select required className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={singleLog.staffId} onChange={e => setSingleLog({...singleLog, staffId: e.target.value})}>
+                                        <option value="">Select staff...</option>
+                                        {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+                                    </select>
                                 </div>
-                            ))}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Course Name</label>
+                                    <select required className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={singleLog.courseName} onChange={e => setSingleLog({...singleLog, courseName: e.target.value})}>
+                                        <option value="">Select course...</option>
+                                        {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="w-1/2 pr-3">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Date Completed</label>
+                                <input required type="date" className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={singleLog.date} onChange={e => setSingleLog({...singleLog, date: e.target.value})} />
+                            </div>
+                            
+                            <div className="pt-4">
+                                <button type="submit" className="flex items-center gap-2 bg-[#5c4ce5] hover:bg-[#4a3bc2] text-white font-bold py-2.5 px-6 rounded-lg transition-colors">
+                                    <CheckSquare className="w-4 h-4" /> Log Completion
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
+                {/* SCHEDULE COURSE TAB */}
+                {activeTab === 'schedule' && (
+                    <div className="max-w-3xl bg-white p-8 border border-slate-200 rounded-xl shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1">Schedule Course</h2>
+                        <p className="text-sm text-slate-500 mb-8">Plan an upcoming training booking. This displays as 'Booked' until the date passes, then moves to 'In Progress'.</p>
+                        
+                        <form onSubmit={handleScheduleSubmit} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Staff Member</label>
+                                    <select required className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={scheduleLog.staffId} onChange={e => setScheduleLog({...scheduleLog, staffId: e.target.value})}>
+                                        <option value="">Select staff...</option>
+                                        {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Course Name</label>
+                                    <select required className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={scheduleLog.courseName} onChange={e => setScheduleLog({...scheduleLog, courseName: e.target.value})}>
+                                        <option value="">Select course...</option>
+                                        {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="w-1/2 pr-3">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Booking Date</label>
+                                <input required type="date" className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={scheduleLog.date} onChange={e => setScheduleLog({...scheduleLog, date: e.target.value})} />
+                            </div>
+                            <div className="pt-4">
+                                <button type="submit" className="flex items-center gap-2 bg-[#5c4ce5] hover:bg-[#4a3bc2] text-white font-bold py-2.5 px-6 rounded-lg transition-colors">
+                                    <CalendarDays className="w-4 h-4" /> Schedule Course
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
+                {/* BULK LOG MULTI-STAFF TAB */}
+                {activeTab === 'bulk' && (
+                    <div className="max-w-3xl bg-white p-8 border border-slate-200 rounded-xl shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1">Bulk Log Completion</h2>
+                        <p className="text-sm text-slate-500 mb-8">Apply a course completion date to multiple staff members simultaneously to save time.</p>
+                        
+                        <form onSubmit={handleBulkLogSubmit} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Course Name</label>
+                                    <select required className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={bulkLog.courseName} onChange={e => setBulkLog({...bulkLog, courseName: e.target.value})}>
+                                        <option value="">Select course...</option>
+                                        {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Date Completed</label>
+                                    <input required type="date" className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" value={bulkLog.date} onChange={e => setBulkLog({...bulkLog, date: e.target.value})} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Select Attending Team Members</label>
+                                <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-50">
+                                    {assignableStaff.map(staff => (
+                                        <label key={staff.id} className="flex items-center gap-3 p-3 border border-slate-200 rounded-md bg-white cursor-pointer hover:border-indigo-300 transition-colors shadow-sm">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded text-[#5c4ce5] w-4 h-4 focus:ring-[#5c4ce5]" 
+                                                checked={bulkLog.selectedStaffIds.includes(staff.id)}
+                                                onChange={() => toggleBulkStaffSelection(staff.id)}
+                                            />
+                                            <span className="text-sm font-bold text-slate-800">{staff.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="pt-4">
+                                <button type="submit" disabled={bulkLog.selectedStaffIds.length === 0} className="flex items-center gap-2 bg-[#5c4ce5] hover:bg-[#4a3bc2] text-white font-bold py-2.5 px-6 rounded-lg transition-colors disabled:opacity-50">
+                                    <Layers className="w-4 h-4" /> Log Bulk Compliances
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
+                {/* REMARKS & NOTES TAB */}
+                {activeTab === 'remarks' && (
+                    <div className="max-w-3xl bg-white p-8 border border-slate-200 rounded-xl shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1">Personnel Training Remarks</h2>
+                        <p className="text-sm text-slate-500 mb-8">Review or modify specific notes for each individual's deployment requirements.</p>
+                        
+                        <div className="space-y-6">
+                            <div className="w-1/2">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Select Staff Member</label>
+                                <select 
+                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                    value={selectedRemarksStaffId}
+                                    onChange={e => {
+                                        setSelectedRemarksStaffId(e.target.value);
+                                        const found = staffList.find(s => s.id === parseInt(e.target.value));
+                                        setRemarksText(found ? found.remarks || '' : '');
+                                    }}
+                                >
+                                    <option value="">Choose team member...</option>
+                                    {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+
+                            {selectedRemarksStaffId && (
+                                <div className="animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Remarks / Notes</label>
+                                    <textarea 
+                                        rows={5}
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner"
+                                        placeholder="Add special context details here (e.g., 'Requires special certification review next month')"
+                                        value={remarksText}
+                                        onChange={e => setRemarksText(e.target.value)}
+                                    />
+                                    <div className="pt-4 flex gap-3">
+                                        <button onClick={handleSaveRemarks} className="bg-[#5c4ce5] hover:bg-[#4a3bc2] text-white font-bold py-2.5 px-6 rounded-lg transition-colors">
+                                            Save Notes
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
+                    </div>
+                )}
+
+                {/* IN PROGRESS TAB */}
+                {activeTab === 'progress' && (
+                    <div className="max-w-3xl bg-white p-8 border border-slate-200 rounded-xl shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1">In Progress (Awaiting Authorisation)</h2>
+                        <p className="text-sm text-slate-500 mb-8">These scheduled courses have passed their booking date. Verify completion to update the matrix.</p>
+                        
+                        {approvalRequiredItems.length === 0 ? (
+                            <div className="p-10 text-center text-slate-500 bg-slate-50 rounded-xl border border-slate-100">
+                                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-emerald-400" />
+                                <p className="text-lg font-bold text-slate-700">All caught up!</p>
+                                <p className="text-sm">No courses are currently awaiting authorisation.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {approvalRequiredItems.map((item, idx) => (
+                                    <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-purple-300 transition-colors">
+                                        <div className="mb-4 sm:mb-0">
+                                            <div className="font-black text-lg text-slate-900">{item.staffName}</div>
+                                            <div className="text-sm text-slate-600 font-medium mt-1">{item.courseName}</div>
+                                            <div className="text-xs text-purple-600 font-bold mt-2 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded-md w-fit">
+                                                <Clock className="w-3.5 h-3.5" /> Scheduled Date: {new Date(item.date).toLocaleDateString('en-GB')}
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleApproveTraining(item.staffId, item.courseName, item.date)}
+                                            className="flex items-center justify-center w-full sm:w-auto gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+                                        >
+                                            <Check className="w-4 h-4" /> Authorise Completion
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* MATRIX VIEW TAB */}
                 {activeTab === 'matrix' && (
-                    <>
+                    <div className="animate-in fade-in">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 print:hidden">
                             <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                                 <div>
@@ -543,7 +692,7 @@ export default function TrainingMatrix() {
                             </div>
                             <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Expiring Soon (30d)</p>
+                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Expiring Soon</p>
                                     <p className="text-3xl font-black text-amber-600">{totalExpiring}</p>
                                 </div>
                                 <div className="p-3 rounded-full bg-amber-100 text-amber-600"><AlertTriangle className="w-6 h-6" /></div>
@@ -560,14 +709,23 @@ export default function TrainingMatrix() {
                         <div className="mb-4 flex flex-wrap gap-2 pb-2 print:hidden justify-between items-center">
                             <div className="flex gap-2">
                                 {['All', 'Nurse', 'HCA', 'ANP'].map(role => (
-                                    <button key={role} onClick={() => setFilter(role)} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${filter === role ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}>
+                                    <button key={role} onClick={() => setFilter(role)} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${filter === role ? 'bg-[#5c4ce5] text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}>
                                         {role}s
                                     </button>
                                 ))}
                             </div>
-                            <button onClick={() => setShowArchived(!showArchived)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${showArchived ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}>
-                                <Archive className="w-4 h-4" /> {showArchived ? 'Hide Archived' : 'Show Archived'}
-                            </button>
+                            <div className="flex gap-2">
+                                <div className="relative">
+                                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                                    <input type="text" placeholder="Find staff member..." className="pl-9 pr-4 py-1.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                                </div>
+                                <button onClick={() => setShowArchived(!showArchived)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showArchived ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}>
+                                    <Archive className="w-4 h-4" /> {showArchived ? 'Hide Archived' : 'Show Archived'}
+                                </button>
+                                <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 rounded-lg font-medium shadow-sm transition-all"><Download className="w-4 h-4" /> Export</button>
+                                <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 rounded-lg font-medium shadow-sm transition-all"><Printer className="w-4 h-4" /> Print</button>
+                                <button onClick={() => setIsManagingCourses(true)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 rounded-lg font-medium shadow-sm transition-all"><BookOpen className="w-4 h-4" /> Manage Courses</button>
+                            </div>
                         </div>
 
                         <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-x-auto print:border-none print:shadow-none">
@@ -619,7 +777,7 @@ export default function TrainingMatrix() {
                                                                 {getStatusIcon(detail.status)}
                                                                 <span className="truncate">{detail.status}</span>
                                                             </div>
-                                                            {detail.date && <div className="text-[10px] mt-1 opacity-80 font-medium">Done: {new Date(detail.date).toLocaleDateString('en-GB')}</div>}
+                                                            {detail.date && <div className="text-[10px] mt-1 opacity-80 font-medium">Date: {new Date(detail.date).toLocaleDateString('en-GB')}</div>}
                                                             {detail.expiry && <div className="text-[10px] opacity-80 font-bold mt-0.5">Exp: {detail.expiry === 'Never' ? 'Never' : new Date(detail.expiry).toLocaleDateString('en-GB')}</div>}
                                                         </div>
                                                     </td>
@@ -629,157 +787,6 @@ export default function TrainingMatrix() {
                                     )})}
                                 </tbody>
                             </table>
-                        </div>
-                    </>
-                )}
-
-                {/* LOG COMPLETED COURSE TAB */}
-                {activeTab === 'log' && (
-                    <div className="max-w-xl mx-auto bg-white p-6 border border-slate-200 rounded-xl shadow-sm">
-                        <h2 className="text-lg font-black text-slate-900 mb-1">Log Completed Course</h2>
-                        <p className="text-xs text-slate-500 mb-6">Instantly record a single certification into a personnel profile.</p>
-                        <form onSubmit={handleSingleLogSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Staff Member</label>
-                                <select required className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={singleLog.staffId} onChange={e => setSingleLog({...singleLog, staffId: e.target.value})}>
-                                    <option value="">Select staff...</option>
-                                    {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Requirement / Course Name</label>
-                                <select required className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={singleLog.courseName} onChange={e => setSingleLog({...singleLog, courseName: e.target.value})}>
-                                    <option value="">Select course requirement...</option>
-                                    {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Date Completed</label>
-                                <input required type="date" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={singleLog.date} onChange={e => setSingleLog({...singleLog, date: e.target.value})} />
-                            </div>
-                            <div className="pt-4 flex gap-2">
-                                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition-colors">Log Completion</button>
-                                <button type="button" onClick={() => setActiveTab('matrix')} className="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-200">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {/* SCHEDULE COURSE TAB */}
-                {activeTab === 'schedule' && (
-                    <div className="max-w-xl mx-auto bg-white p-6 border border-slate-200 rounded-xl shadow-sm">
-                        <h2 className="text-lg font-black text-slate-900 mb-1">Schedule Future Course</h2>
-                        <p className="text-xs text-slate-500 mb-6">Plan an upcoming training booking. This displays as 'Booked' until the date passes.</p>
-                        <form onSubmit={handleScheduleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Staff Member</label>
-                                <select required className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={scheduleLog.staffId} onChange={e => setScheduleLog({...scheduleLog, staffId: e.target.value})}>
-                                    <option value="">Select staff...</option>
-                                    {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Requirement / Course Name</label>
-                                <select required className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={scheduleLog.courseName} onChange={e => setScheduleLog({...scheduleLog, courseName: e.target.value})}>
-                                    <option value="">Select course requirement...</option>
-                                    {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Target Booking Date</label>
-                                <input required type="date" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={scheduleLog.date} onChange={e => setScheduleLog({...scheduleLog, date: e.target.value})} />
-                            </div>
-                            <div className="pt-4 flex gap-2">
-                                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition-colors">Schedule Training</button>
-                                <button type="button" onClick={() => setActiveTab('matrix')} className="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-200">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {/* BULK LOG MULTI-STAFF TAB */}
-                {activeTab === 'bulk' && (
-                    <div className="max-w-2xl mx-auto bg-white p-6 border border-slate-200 rounded-xl shadow-sm">
-                        <h2 className="text-lg font-black text-slate-900 mb-1">Bulk Log Completion</h2>
-                        <p className="text-xs text-slate-500 mb-6">Apply a course completion date to multiple staff members simultaneously.</p>
-                        <form onSubmit={handleBulkLogSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Requirement / Course Name</label>
-                                    <select required className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={bulkLog.courseName} onChange={e => setBulkLog({...bulkLog, courseName: e.target.value})}>
-                                        <option value="">Select course requirement...</option>
-                                        {courses.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Date Completed</label>
-                                    <input required type="date" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={bulkLog.date} onChange={e => setBulkLog({...bulkLog, date: e.target.value})} />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Select Attending Team Members</label>
-                                <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                    {assignableStaff.map(staff => (
-                                        <label key={staff.id} className="flex items-center gap-2 p-2 border border-slate-100 rounded-md bg-slate-50/50 cursor-pointer hover:bg-slate-50">
-                                            <input 
-                                                type="checkbox" 
-                                                className="rounded text-indigo-600 w-4 h-4" 
-                                                checked={bulkLog.selectedStaffIds.includes(staff.id)}
-                                                onChange={() => toggleBulkStaffSelection(staff.id)}
-                                            />
-                                            <span className="text-xs font-bold text-slate-800">{staff.name} <span className="text-slate-400 font-normal">({staff.role})</span></span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="pt-4 flex gap-2">
-                                <button type="submit" disabled={bulkLog.selectedStaffIds.length === 0} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition-colors disabled:opacity-50">Log Bulk Compliances</button>
-                                <button type="button" onClick={() => setActiveTab('matrix')} className="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-200">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {/* REMARKS & NOTES TAB */}
-                {activeTab === 'remarks' && (
-                    <div className="max-w-xl mx-auto bg-white p-6 border border-slate-200 rounded-xl shadow-sm">
-                        <h2 className="text-lg font-black text-slate-900 mb-1">Personnel Training Remarks</h2>
-                        <p className="text-xs text-slate-500 mb-6">Review or modify ongoing specific notes for each individual's deployment requirements.</p>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Select Staff Member</label>
-                                <select 
-                                    className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-                                    value={selectedRemarksStaffId}
-                                    onChange={e => {
-                                        setSelectedRemarksStaffId(e.target.value);
-                                        const found = staffList.find(s => s.id === parseInt(e.target.value));
-                                        setRemarksText(found ? found.remarks || '' : '');
-                                    }}
-                                >
-                                    <option value="">Choose team member...</option>
-                                    {assignableStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
-
-                            {selectedRemarksStaffId && (
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Remarks / Notes</label>
-                                    <textarea 
-                                        rows={4}
-                                        className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                                        placeholder="Add special context details here (e.g., 'Requires special certification review next month')"
-                                        value={remarksText}
-                                        onChange={e => setRemarksText(e.target.value)}
-                                    />
-                                    <div className="pt-2 flex gap-2">
-                                        <button onClick={handleSaveRemarks} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition-colors">Save Notes</button>
-                                        <button onClick={() => { setSelectedRemarksStaffId(''); setRemarksText(''); }} className="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold hover:bg-slate-200">Clear</button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
