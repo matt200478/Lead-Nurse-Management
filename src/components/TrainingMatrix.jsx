@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Loader2 } from 'lucide-react';
+import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getTrainingDocRef } from '../firebase';
@@ -21,6 +21,11 @@ export default function TrainingMatrix() {
     const [newCourseName, setNewCourseName] = useState('');
     const [newCourseFreq, setNewCourseFreq] = useState('12');
     const [courseToDelete, setCourseToDelete] = useState(null);
+    
+    // States for editing an existing course requirement
+    const [editingCourseName, setEditingCourseName] = useState(null);
+    const [editFormName, setEditFormName] = useState('');
+    const [editFormFreq, setEditFormFreq] = useState('12');
 
     const [selectedCell, setSelectedCell] = useState(null);
     const [cellForm, setCellForm] = useState({ date: '', override: 'Completed' });
@@ -157,6 +162,53 @@ export default function TrainingMatrix() {
       if (!newCourseName.trim() || courses.some(c => c.name.toLowerCase() === newCourseName.trim().toLowerCase())) return; 
       updateCourses([...courses, { name: newCourseName.trim(), freq: newCourseFreq === 'Never' ? null : parseInt(newCourseFreq) }]);
       setNewCourseName('');
+    };
+
+    const handleStartEditCourse = (course) => {
+      setEditingCourseName(course.name);
+      setEditFormName(course.name);
+      setEditFormFreq(course.freq === null ? 'Never' : course.freq.toString());
+    };
+
+    const handleSaveCourseEdit = () => {
+      if (!editFormName.trim()) return;
+
+      // Check for renaming conflicts with other courses
+      if (editFormName.trim().toLowerCase() !== editingCourseName.toLowerCase() && 
+          courses.some(c => c.name.toLowerCase() === editFormName.trim().toLowerCase())) {
+        return;
+      }
+
+      const updatedCourses = courses.map(c => {
+        if (c.name === editingCourseName) {
+          return {
+            name: editFormName.trim(),
+            freq: editFormFreq === 'Never' ? null : parseInt(editFormFreq)
+          };
+        }
+        return c;
+      });
+
+      // If the requirement name changed, migrate existing records in staff profiles automatically
+      let updatedStaffList = [...staffList];
+      if (editFormName.trim() !== editingCourseName) {
+        updatedStaffList = staffList.map(staff => {
+          if (staff.records && staff.records[editingCourseName]) {
+            const newRecords = { ...staff.records };
+            newRecords[editFormName.trim()] = newRecords[editingCourseName];
+            delete newRecords[editingCourseName];
+            return { ...staff, records: newRecords };
+          }
+          return staff;
+        });
+      }
+
+      updateCourses(updatedCourses);
+      if (editFormName.trim() !== editingCourseName) {
+        updateSharedStaff(updatedStaffList);
+      }
+
+      setEditingCourseName(null);
     };
 
     const confirmDeleteCourse = () => {
@@ -434,37 +486,75 @@ export default function TrainingMatrix() {
 
             {isManagingCourses && (
               <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-                <div className="bg-white rounded-xl shadow-xl w-[500px] max-w-[90vw] max-h-[90vh] flex flex-col relative">
+                <div className="bg-white rounded-xl shadow-xl w-[520px] max-w-[90vw] max-h-[90vh] flex flex-col relative">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="text-lg font-bold">Manage Training Requirements</h3>
-                    <button onClick={() => { setIsManagingCourses(false); setCourseToDelete(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                    <button onClick={() => { setIsManagingCourses(false); setCourseToDelete(null); setEditingCourseName(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
                   </div>
                   
-                  <div className="p-6 overflow-y-auto space-y-3 mb-4">
+                  <div className="p-6 overflow-y-auto space-y-3 mb-4 flex-1">
                     {courses.map(course => (
-                      <div key={course.name} className="flex items-center justify-between gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                        <span className="font-medium text-sm flex-1 truncate">{course.name}</span>
-                        <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded">
-                          {course.freq ? `Every ${course.freq}m` : 'Never Expires'}
-                        </span>
-                        <button onClick={() => setCourseToDelete(course.name)} className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <div key={course.name} className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        {editingCourseName === course.name ? (
+                          /* Inline Editing Form */
+                          <div className="space-y-3 p-1">
+                            <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Editing Requirement</div>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <input 
+                                type="text" 
+                                className="flex-1 p-2 border border-slate-300 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" 
+                                value={editFormName} 
+                                onChange={(e) => setEditFormName(e.target.value)} 
+                              />
+                              <select 
+                                className="w-32 p-2 border border-slate-300 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" 
+                                value={editFormFreq} 
+                                onChange={(e) => setEditFormFreq(e.target.value)}
+                              >
+                                <option value="12">12 Months</option>
+                                <option value="24">24 Months</option>
+                                <option value="36">36 Months</option>
+                                <option value="Never">Never Expires</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <button onClick={() => setEditingCourseName(null)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50">Cancel</button>
+                              <button onClick={handleSaveCourseEdit} disabled={!editFormName.trim()} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50">Save Changes</button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Standard Row Display */
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-sm flex-1 truncate">{course.name}</span>
+                            <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded shrink-0">
+                              {course.freq ? `Every ${course.freq}m` : 'Never Expires'}
+                            </span>
+                            <div className="flex gap-1 shrink-0 ml-2">
+                              <button onClick={() => handleStartEditCourse(course)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-all" title="Edit Requirement"><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setCourseToDelete(course.name)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-all" title="Delete Requirement"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
 
-                  <div className="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl">
-                    <h4 className="text-sm font-bold mb-3">Add New Requirement</h4>
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="Course Name" className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 min-w-0" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} />
-                      <select className="w-32 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 shrink-0" value={newCourseFreq} onChange={(e) => setNewCourseFreq(e.target.value)}>
-                        <option value="12">12 Months</option>
-                        <option value="24">24 Months</option>
-                        <option value="36">36 Months</option>
-                        <option value="Never">Never Expires</option>
-                      </select>
-                      <button onClick={handleAddCourse} disabled={!newCourseName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50"><Plus className="w-5 h-5" /></button>
+                  {/* Add New Requirement Footer Area */}
+                  {!editingCourseName && (
+                    <div className="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+                      <h4 className="text-sm font-bold mb-3">Add New Requirement</h4>
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="Course Name" className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 min-w-0" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} />
+                        <select className="w-32 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 shrink-0" value={newCourseFreq} onChange={(e) => setNewCourseFreq(e.target.value)}>
+                          <option value="12">12 Months</option>
+                          <option value="24">24 Months</option>
+                          <option value="36">36 Months</option>
+                          <option value="Never">Never Expires</option>
+                        </select>
+                        <button onClick={handleAddCourse} disabled={!newCourseName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50"><Plus className="w-5 h-5" /></button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {courseToDelete && (
                     <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-6 text-center z-10 rounded-xl backdrop-blur-sm">
