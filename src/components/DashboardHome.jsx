@@ -10,7 +10,6 @@ export default function DashboardHome({ setView }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Rota Card */}
         <div onClick={() => setView('rota')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -21,7 +20,6 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
-        {/* Staff Directory Card */}
         <div onClick={() => setView('staff')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-violet-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-violet-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -32,7 +30,6 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
-        {/* Training Card */}
         <div onClick={() => setView('training')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -43,7 +40,6 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
-        {/* Annual Leave Card */}
         <div onClick={() => setView('leave')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-emerald-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
