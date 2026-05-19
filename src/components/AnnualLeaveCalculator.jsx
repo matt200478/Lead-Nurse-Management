@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Calculator, CalendarDays, Clock, Activity } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calculator, CalendarDays, Clock, Activity, UserCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { onSnapshot } from 'firebase/firestore';
+import { auth, getRotaDocRef } from '../firebase';
 
 const getEasterDate = (year) => {
   const f = Math.floor, G = year % 19, C = f(year / 100),
@@ -61,6 +64,14 @@ const getUKBankHolidays = (year) => {
 
 export default function AnnualLeaveCalculator() {
   const currentYear = new Date().getFullYear();
+  
+  const [user, setUser] = useState(null);
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
+  const [staffList, setStaffList] = useState([]);
+  
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [importAlerts, setImportAlerts] = useState([]);
+
   const [leaveYearStart, setLeaveYearStart] = useState(`${currentYear}-04-01`);
   const [leaveYearEnd, setLeaveYearEnd] = useState(`${currentYear + 1}-03-31`);
   const [empStart, setEmpStart] = useState(`${currentYear}-04-01`);
@@ -73,6 +84,72 @@ export default function AnnualLeaveCalculator() {
   const [workingDays, setWorkingDays] = useState({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false });
   const [useOverrideG, setUseOverrideG] = useState(false);
   const [manualBHDeduction, setManualBHDeduction] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const unsubscribe = onSnapshot(getRotaDocRef(), (docSnap) => {
+        if (docSnap.exists() && docSnap.data().staffList) {
+          setStaffList(docSnap.data().staffList);
+        }
+        setIsDbLoaded(true);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Error setting up snapshot:", e);
+      setIsDbLoaded(true);
+    }
+  }, [user]);
+
+  const handleStaffSelect = (e) => {
+    const id = e.target.value;
+    setSelectedStaffId(id);
+    setImportAlerts([]);
+
+    if (!id) return;
+
+    const staff = staffList.find(s => s.id === parseInt(id));
+    if (!staff) return;
+
+    let alerts = [];
+
+    // Map contracted hours
+    if (staff.contractedHours && staff.contractedHours > 0) {
+      setContractedHours(staff.contractedHours);
+    } else {
+      alerts.push("Contracted hours missing in profile. Please input manually.");
+    }
+
+    // Map working days from schedule
+    if (staff.schedule && Object.keys(staff.schedule).length > 0) {
+      const dayMap = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0 };
+      const newWorkingDays = { 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 0: false };
+      let hasShifts = false;
+
+      Object.keys(staff.schedule).forEach(dayName => {
+        const shift = staff.schedule[dayName];
+        if (shift && shift.start && shift.end) {
+          newWorkingDays[dayMap[dayName]] = true;
+          hasShifts = true;
+        }
+      });
+
+      if (hasShifts) {
+        setWorkingDays(newWorkingDays);
+      } else {
+        alerts.push("Schedule is empty. Please select standard working days manually.");
+      }
+    } else {
+      alerts.push("No weekly schedule found. Please select standard working days manually.");
+    }
+
+    setImportAlerts(alerts);
+  };
 
   const toggleDay = (dayIndex) => {
     setWorkingDays(prev => ({ ...prev, [dayIndex]: !prev[dayIndex] }));
@@ -145,12 +222,52 @@ export default function AnnualLeaveCalculator() {
     };
   }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, standardFTEHours, baseEntitlementDays, workingDays, useOverrideG, manualBHDeduction]);
 
-  return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto font-sans text-slate-800 print:p-0 print:max-w-full">
-      <div className="flex items-center gap-3 mb-6 print:hidden">
-         <Calculator className="w-8 h-8 text-emerald-600" />
-         <h1 className="text-2xl font-black tracking-tight text-slate-900">Leave Calculator</h1>
+  if (!isDbLoaded) {
+    return (
+      <div className="flex-1 bg-gray-50 flex items-center justify-center text-emerald-600 h-full">
+        <Loader2 className="w-10 h-10 animate-spin mb-4" />
       </div>
+    );
+  }
+
+  const activeStaff = staffList.filter(s => s.status !== 'Archived');
+
+  return (
+    <div className="p-4 md:p-6 max-w-5xl mx-auto font-sans text-slate-800 print:p-0 print:max-w-full overflow-y-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 print:hidden">
+         <div className="flex items-center gap-3">
+           <Calculator className="w-8 h-8 text-emerald-600" />
+           <h1 className="text-2xl font-black tracking-tight text-slate-900">Leave Calculator</h1>
+         </div>
+         
+         <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2">
+           <UserCheck className="w-5 h-5 text-emerald-600 ml-2" />
+           <select 
+             className="bg-transparent font-medium outline-none text-sm p-1 cursor-pointer w-48 text-slate-700"
+             value={selectedStaffId}
+             onChange={handleStaffSelect}
+           >
+             <option value="">-- Manual Calculation --</option>
+             {activeStaff.map(staff => (
+               <option key={staff.id} value={staff.id}>{staff.name} - {staff.role}</option>
+             ))}
+           </select>
+         </div>
+      </div>
+
+      {importAlerts.length > 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 print:hidden">
+          <div className="flex items-center gap-2 text-amber-800 font-bold mb-2">
+            <AlertTriangle className="w-5 h-5" />
+            Missing Profile Data
+          </div>
+          <ul className="list-disc pl-5 text-sm text-amber-700 space-y-1">
+            {importAlerts.map((alert, idx) => (
+              <li key={idx}>{alert}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6 print:hidden">
@@ -159,7 +276,7 @@ export default function AnnualLeaveCalculator() {
             
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Contracted Hours</label>
-              <input type="number" step="0.5" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" value={contractedHours} onChange={e => setContractedHours(e.target.value)} />
+              <input type="number" step="0.5" className={`w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 ${importAlerts.some(a => a.includes('Contracted hours')) ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-300'}`} value={contractedHours} onChange={e => setContractedHours(e.target.value)} />
             </div>
 
             <div>
@@ -173,14 +290,14 @@ export default function AnnualLeaveCalculator() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Standard Working Days</label>
-              <div className="flex gap-1 justify-between">
+              <div className={`flex gap-1 justify-between p-2 rounded-lg ${importAlerts.some(a => a.includes('Schedule is empty') || a.includes('No weekly schedule')) ? 'bg-amber-50 border border-amber-300' : ''}`}>
                 {['M','T','W','T','F','S','S'].map((day, idx) => {
                   const dayIdx = idx === 6 ? 0 : idx + 1; 
                   return (
                     <button 
                       key={idx} 
                       onClick={() => toggleDay(dayIdx)}
-                      className={`w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center transition-colors ${workingDays[dayIdx] ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                      className={`w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center transition-colors ${workingDays[dayIdx] ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 border border-slate-200'}`}
                     >
                       {day}
                     </button>
