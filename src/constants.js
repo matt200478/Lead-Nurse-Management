@@ -25,10 +25,39 @@ export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 export const WEEKENDS = ['Saturday', 'Sunday'];
 
 export const INITIAL_UNIFIED_STAFF = [
-  { id: 1, name: 'Michelle Scotney', role: 'Nurse', status: 'Active', skills: ['Minor Illness', 'Chronic Disease', 'Bloods', 'Smears', 'Immunisations'], records: {}, remarks: '' },
-  { id: 2, name: 'Sarah (RN)', role: 'Nurse', status: 'Active', skills: ['Bloods', 'Smears', 'Immunisations'], records: {}, remarks: '' },
-  { id: 3, name: 'John (ANP)', role: 'ANP', status: 'Active', skills: ['Minor Illness', 'Chronic Disease'], records: {}, remarks: '' },
-  { id: 4, name: 'Emma (HCA)', role: 'HCA', status: 'Active', skills: ['Bloods'], records: {}, remarks: '' },
+  { 
+    id: 1, 
+    name: 'Michelle Scotney', 
+    role: 'Nurse', 
+    status: 'Active', 
+    skills: ['Minor Illness', 'Chronic Disease', 'Bloods', 'Smears', 'Immunisations'], 
+    records: {}, 
+    remarks: '',
+    contractedHours: 37.5,
+    requiresWeekends: false,
+    schedule: {
+      'Monday': { start: '08:00', end: '16:00' },
+      'Tuesday': { start: '08:00', end: '16:00' },
+      'Wednesday': { start: '08:00', end: '16:00' },
+      'Thursday': { start: '08:00', end: '16:00' },
+      'Friday': { start: '08:00', end: '15:30' }
+    }
+  },
+  { 
+    id: 2, 
+    name: 'Sarah (RN)', 
+    role: 'Nurse', 
+    status: 'Active', 
+    skills: ['Bloods', 'Smears', 'Immunisations'], 
+    records: {}, 
+    remarks: '',
+    contractedHours: 20,
+    requiresWeekends: true,
+    schedule: {
+      'Monday': { start: '08:00', end: '18:30' }, // Will trigger EA badge
+      'Wednesday': { start: '08:00', end: '18:30' }
+    }
+  }
 ];
 
 export const INITIAL_TRAINING_COURSES = [
