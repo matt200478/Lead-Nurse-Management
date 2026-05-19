@@ -30,3 +30,24 @@ export const INITIAL_UNIFIED_STAFF = [
   { id: 3, name: 'John (ANP)', role: 'ANP', status: 'Active', skills: ['Minor Illness', 'Chronic Disease'], records: {}, remarks: '' },
   { id: 4, name: 'Emma (HCA)', role: 'HCA', status: 'Active', skills: ['Bloods'], records: {}, remarks: '' },
 ];
+
+export const INITIAL_TRAINING_COURSES = [
+  { name: 'Independent Prescriber', freq: 12 },
+  { name: 'Acute illness', freq: null },
+  { name: 'Imms and Vacs', freq: 12 },
+  { name: 'Cytology', freq: 36 },
+  { name: 'Dressings', freq: null },
+  { name: 'COPD', freq: 12 },
+  { name: 'Asthma', freq: 12 },
+  { name: 'HTN', freq: 12 },
+  { name: 'CHD', freq: 12 },
+  { name: 'CKD', freq: 12 },
+  { name: 'HF', freq: 12 },
+  { name: 'Diabetes', freq: 12 },
+  { name: 'Vaginal Pessary', freq: null },
+  { name: 'CHC', freq: 12 },
+  { name: 'POP', freq: 12 },
+  { name: 'Phlebotomy', freq: null },
+  { name: 'Revalidation', freq: 36 },
+  { name: 'Mentor', freq: 12 }
+];
