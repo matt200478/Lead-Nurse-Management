@@ -119,13 +119,21 @@ export default function CoverBoard() {
   const handleClaimShift = (shiftId) => {
     if (!currentStaffId) return alert("Please select your staff profile first.");
     
+    const shiftToClaim = availableShifts.find(s => s.id === shiftId);
+    const staff = staffList.find(s => s.id === Number(currentStaffId));
+    
+    // Prevent claiming if the roles do not match
+    if (staff && shiftToClaim && staff.role !== shiftToClaim.role) {
+        return alert(`Role mismatch: As a ${staff.role}, you cannot claim a ${shiftToClaim.role} shift.`);
+    }
+
     const updatedShifts = availableShifts.map(s => 
       s.id === shiftId ? { ...s, status: 'Pending', claimedBy: Number(currentStaffId) } : s
     );
     updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
     setViewShift(null);
   };
-
+  
   const handleApproveShift = (shift) => {
     // 1. Calculate which "Week Commencing" (Monday) this shift belongs to
     const shiftDate = new Date(shift.date);
