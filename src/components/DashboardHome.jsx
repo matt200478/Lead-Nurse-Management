@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarDays, Contact, GraduationCap, Calculator, ChevronRight } from 'lucide-react';
+import { CalendarDays, Contact, GraduationCap, Calculator, ChevronRight, Stethoscope } from 'lucide-react';
 
 export default function DashboardHome({ setView }) {
   return (
@@ -9,7 +9,8 @@ export default function DashboardHome({ setView }) {
         <p className="text-slate-500 mt-2 text-lg">Practice Management Suite • Bourne Galletly</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Rota Card */}
         <div onClick={() => setView('rota')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -20,6 +21,18 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
+        {/* Cover Board Card (NEW) */}
+        <div onClick={() => setView('cover')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-pink-300 transition-all group relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-pink-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mb-4 shadow-inner"><Stethoscope className="w-6 h-6" /></div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Shift Cover Board</h2>
+            <p className="text-sm text-slate-500 mb-4 leading-relaxed">Post available shifts for team members to claim. Approve requests to instantly update the Rota.</p>
+            <div className="flex items-center text-pink-600 text-sm font-semibold group-hover:translate-x-1 transition-transform">Open Cover Board <ChevronRight className="w-4 h-4 ml-1" /></div>
+          </div>
+        </div>
+
+        {/* Staff Directory Card */}
         <div onClick={() => setView('staff')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-violet-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-violet-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -30,6 +43,7 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
+        {/* Training Card */}
         <div onClick={() => setView('training')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
@@ -40,6 +54,7 @@ export default function DashboardHome({ setView }) {
           </div>
         </div>
 
+        {/* Annual Leave Card */}
         <div onClick={() => setView('leave')} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-emerald-300 transition-all group relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110 z-0"></div>
           <div className="relative z-10">
