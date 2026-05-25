@@ -432,17 +432,27 @@ const displayedShifts = availableShifts.filter(s => {
                 </div>
               )}
 
-              {/* STAFF CONTROLS */}
+{/* STAFF CONTROLS */}
               {viewMode === 'staff' && (
                 <div className="space-y-3">
                   {viewShift.status === 'Open' ? (
-                    <button 
-                      onClick={() => handleClaimShift(viewShift.id)}
-                      disabled={!currentStaffId}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-5 h-5" /> Claim Extra Shift
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => handleClaimShift(viewShift.id)}
+                        disabled={!currentStaffId || staffList.find(s => s.id === Number(currentStaffId))?.role !== viewShift.role}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-5 h-5" /> Claim Extra Shift
+                      </button>
+                      
+                      {/* Validation Messages */}
+                      {!currentStaffId && (
+                        <p className="text-xs text-red-500 text-center font-semibold">Select your name from the dropdown above to claim.</p>
+                      )}
+                      {currentStaffId && staffList.find(s => s.id === Number(currentStaffId))?.role !== viewShift.role && (
+                        <p className="text-xs text-red-500 text-center font-semibold">You cannot claim this. Only {viewShift.role}s can cover this shift.</p>
+                      )}
+                    </>
                   ) : (
                     viewShift.claimedBy === Number(currentStaffId) ? (
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
@@ -455,7 +465,6 @@ const displayedShifts = availableShifts.filter(s => {
                       <p className="text-center text-sm font-bold text-slate-500 p-3 bg-slate-50 rounded-xl">Shift has been claimed by another team member.</p>
                     )
                   )}
-                  {!currentStaffId && <p className="text-xs text-red-500 text-center font-semibold">Select your name from the dropdown above to claim.</p>}
                 </div>
               )}
 
