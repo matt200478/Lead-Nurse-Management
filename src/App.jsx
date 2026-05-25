@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, LayoutDashboard, CalendarDays, Users, GraduationCap, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  ShieldCheck, 
+  LayoutDashboard, 
+  CalendarDays, 
+  Users, 
+  GraduationCap, 
+  Calculator, 
+  ChevronLeft, 
+  ChevronRight,
+  Stethoscope 
+} from 'lucide-react';
 import { signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -8,6 +18,7 @@ import ClinicRota from './components/ClinicRota';
 import StaffDirectory from './components/StaffDirectory';
 import TrainingMatrix from './components/TrainingMatrix';
 import AnnualLeaveCalculator from './components/AnnualLeaveCalculator';
+import CoverBoard from './components/CoverBoard';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -57,6 +68,11 @@ export default function App() {
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Clinic Rota</span>}
           </button>
 
+          <button onClick={() => setCurrentView('cover')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'cover' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Stethoscope className="w-5 h-5 shrink-0" />
+            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Cover Board</span>}
+          </button>
+
           <button onClick={() => setCurrentView('staff')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'staff' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
             <Users className="w-5 h-5 shrink-0" />
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Staff Directory</span>}
@@ -83,6 +99,7 @@ export default function App() {
       <div className="flex-1 overflow-auto bg-slate-100 relative">
         {currentView === 'dashboard' && <DashboardHome setView={setCurrentView} />}
         {currentView === 'rota' && <ClinicRota />}
+        {currentView === 'cover' && <CoverBoard />}
         {currentView === 'staff' && <StaffDirectory />}
         {currentView === 'training' && <TrainingMatrix />}
         {currentView === 'leave' && <AnnualLeaveCalculator />}
