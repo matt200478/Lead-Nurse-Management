@@ -78,8 +78,8 @@ export default function AnnualLeaveCalculator() {
   const [empEnd, setEmpEnd] = useState(`${currentYear + 1}-03-31`);
   
   const [contractedHours, setContractedHours] = useState(37.5);
-  const [standardFTEHours, setStandardFTEHours] = useState(37.5);
-  const [baseEntitlementDays, setBaseEntitlementDays] = useState(27);
+  // Default to 32 as requested
+  const [baseEntitlementDays, setBaseEntitlementDays] = useState(32); 
   
   const [workingDays, setWorkingDays] = useState({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false });
   const [useOverrideG, setUseOverrideG] = useState(false);
@@ -163,7 +163,6 @@ export default function AnnualLeaveCalculator() {
     
     const activeDaysPerWeek = Object.values(workingDays).filter(Boolean).length || 1;
     const hoursPerWorkingDay = contractedHours / activeDaysPerWeek;
-    const wte = contractedHours / standardFTEHours;
 
     const daysInLeaveYear = Math.ceil((leaveEndObj - leaveStartObj) / (1000 * 60 * 60 * 24)) + 1;
     const effectiveStart = startObj > leaveStartObj ? startObj : leaveStartObj;
@@ -172,25 +171,41 @@ export default function AnnualLeaveCalculator() {
     
     const proRataMultiplier = daysEmployed / daysInLeaveYear;
 
-    const standardDailyHours = standardFTEHours / 5;
-    const fullYearBaseHours = baseEntitlementDays * standardDailyHours * wte;
-    const proRataBaseHours = fullYearBaseHours * proRataMultiplier;
-
     const allBHs = [
       ...getUKBankHolidays(leaveStartObj.getFullYear()),
       ...getUKBankHolidays(leaveEndObj.getFullYear())
     ];
     
+    // Find total FT Bank Holidays in the leave year (B)
     const bhInLeaveYear = allBHs.filter((h, index, self) => {
       const d = h.date.getTime();
       return d >= leaveStartObj.getTime() && d <= leaveEndObj.getTime() && index === self.findIndex(t => t.date.getTime() === d);
     });
 
-    const fullYearBHHours = bhInLeaveYear.length * standardDailyHours * wte;
-    const proRataBHHours = fullYearBHHours * proRataMultiplier;
+    // --- APPLYING THE NEW A -> F FORMULA ---
+    
+    // A = Equivalent annual leave entitlement given to full-time employee
+    const A = Number(baseEntitlementDays);
+    
+    // B = Equivalent annual Bank Holidays given to full-time employees
+    const B = bhInLeaveYear.length; 
+    
+    // C = Total entitlement for paid leave full-time employee DAYS (A+B)
+    const C = A + B;
+    
+    // D = Number of Full-time days (C) divided by 5 (working days per week)
+    const D = C / 5;
+    
+    // E = Number of hours worked per week
+    const E = Number(contractedHours);
+    
+    // F = Number of weeks FT equivalent (D) MULTIPLIED by Number of hours worked per week (E)
+    const F = D * E;
 
-    const grossEntitlement = proRataBaseHours + proRataBHHours;
+    // Gross Entitlement (incorporating pro-rata if they start mid-year)
+    const grossEntitlement = F * proRataMultiplier;
 
+    // Calculate Bank Holidays falling on working days during employment period
     const bhInEmployment = allBHs.filter((h, index, self) => {
       const d = h.date.getTime();
       return d >= effectiveStart.getTime() && d <= effectiveEnd.getTime() && index === self.findIndex(t => t.date.getTime() === d);
@@ -205,22 +220,22 @@ export default function AnnualLeaveCalculator() {
     const autoBHDeduction = relevantBankHolidays.reduce((sum, h) => sum + h.deduction, 0);
     const finalBHDeduction = useOverrideG ? Number(manualBHDeduction) : autoBHDeduction;
 
-    const netLeave = grossEntitlement - finalBHDeduction;
+    // Deduct BHs and round to nearest 0.5
+    const rawNetLeave = grossEntitlement - finalBHDeduction;
+    const netLeave = Math.round(rawNetLeave * 2) / 2;
 
     return {
-      wte,
       proRataMultiplier,
       daysEmployed,
       daysInLeaveYear,
+      A, B, C, D, E, F,
       grossEntitlement,
-      proRataBaseHours,
-      proRataBHHours,
       finalBHDeduction,
       netLeave,
       relevantBankHolidays,
       hoursPerWorkingDay
     };
-  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, standardFTEHours, baseEntitlementDays, workingDays, useOverrideG, manualBHDeduction]);
+  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, baseEntitlementDays, workingDays, useOverrideG, manualBHDeduction]);
 
   if (!isDbLoaded) {
     return (
@@ -284,6 +299,7 @@ export default function AnnualLeaveCalculator() {
               <select className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" value={baseEntitlementDays} onChange={e => setBaseEntitlementDays(e.target.value)}>
                 <option value="27">27 Days (0-5 Years)</option>
                 <option value="29">29 Days (5-10 Years)</option>
+                <option value="32">32 Days (Standard)</option>
                 <option value="33">33 Days (10+ Years)</option>
               </select>
             </div>
@@ -348,7 +364,7 @@ export default function AnnualLeaveCalculator() {
                 <div className="w-full h-px bg-slate-700 print:bg-slate-200"></div>
                 
                 <div className="flex justify-between items-center text-rose-400 print:text-rose-600">
-                  <span className="font-medium text-sm">Less: Bank Holidays Taken (Row G)</span>
+                  <span className="font-medium text-sm">Less: Bank Holidays Taken</span>
                   <span className="font-bold text-lg">-{calculations.finalBHDeduction.toFixed(2)} hrs</span>
                 </div>
               </div>
@@ -365,12 +381,15 @@ export default function AnnualLeaveCalculator() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-500" /> Pro-Rata Stats</h3>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="flex justify-between"><span>WTE:</span> <span className="font-bold text-slate-900">{calculations.wte.toFixed(4)}</span></li>
-                <li className="flex justify-between"><span>Days in Period:</span> <span className="font-bold text-slate-900">{calculations.daysEmployed} / {calculations.daysInLeaveYear}</span></li>
-                <li className="flex justify-between border-t border-slate-100 pt-2"><span>Pro-Rata Base Hrs:</span> <span className="font-bold text-slate-900">{calculations.proRataBaseHours.toFixed(2)}</span></li>
-                <li className="flex justify-between"><span>Pro-Rata BH Hrs:</span> <span className="font-bold text-slate-900">{calculations.proRataBHHours.toFixed(2)}</span></li>
+              <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-500" /> Calculation Formula</h3>
+              <ul className="space-y-1.5 text-sm text-slate-600">
+                <li className="flex justify-between"><span>A (Base FT Leave):</span> <span className="font-bold text-slate-900">{calculations.A} Days</span></li>
+                <li className="flex justify-between"><span>B (FT Bank Holidays):</span> <span className="font-bold text-slate-900">{calculations.B} Days</span></li>
+                <li className="flex justify-between"><span>C (Total FT Days):</span> <span className="font-bold text-slate-900">{calculations.C} Days</span></li>
+                <li className="flex justify-between"><span>D (Weeks per year):</span> <span className="font-bold text-slate-900">{calculations.D.toFixed(2)} Weeks</span></li>
+                <li className="flex justify-between"><span>E (Worked hrs/week):</span> <span className="font-bold text-slate-900">{calculations.E} hrs</span></li>
+                <li className="flex justify-between border-t border-slate-100 pt-1.5"><span>F (Total Hrs/Year):</span> <span className="font-bold text-slate-900">{calculations.F.toFixed(2)} hrs</span></li>
+                <li className="flex justify-between border-t border-slate-100 pt-1.5 text-emerald-700"><span>Pro-Rata Adjustment:</span> <span className="font-bold">{calculations.daysEmployed} / {calculations.daysInLeaveYear} days</span></li>
               </ul>
             </div>
 
