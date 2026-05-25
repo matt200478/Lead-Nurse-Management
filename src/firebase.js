@@ -15,6 +15,7 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// Clean the App ID to prevent routing failures
 export const getRotaDocRef = () => {
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
   const segments = ['artifacts', ...appId.split('/'), 'public', 'data', 'clinic_rota', 'shared_data'];
@@ -25,6 +26,13 @@ export const getRotaDocRef = () => {
 export const getTrainingDocRef = () => {
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
   const segments = ['artifacts', ...appId.split('/'), 'public', 'data', 'clinic_rota', 'training_data'];
+  if (segments.length % 2 !== 0) segments.push('doc');
+  return doc(db, ...segments);
+};
+
+export const getCoverBoardDocRef = () => {
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
+  const segments = ['artifacts', ...appId.split('/'), 'public', 'data', 'clinic_rota', 'cover_board'];
   if (segments.length % 2 !== 0) segments.push('doc');
   return doc(db, ...segments);
 };
