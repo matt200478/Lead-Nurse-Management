@@ -202,8 +202,8 @@ export default function CoverBoard() {
 
   const getStaffName = (id) => staffList.find(s => s.id === id)?.name || 'Unknown';
 
-  const displayedShifts = availableShifts.filter(s => {
-    if (filter !== 'All' && s.role !== filter) return false;
+const displayedShifts = availableShifts.filter(s => {
+    if (roleFilter !== 'All' && s.role !== roleFilter) return false;
     // Don't show approved shifts on the board to avoid clutter
     if (s.status === 'Approved') return false; 
     return true;
