@@ -29,7 +29,8 @@ export default function TrainingMatrix() {
     const [editFormRoles, setEditFormRoles] = useState([]);
 
     const [selectedCell, setSelectedCell] = useState(null);
-    const [cellForm, setCellForm] = useState({ date: '', bookedDate: '', override: 'Completed' });
+    const [cellForm, setCellForm] = useState({ history: [], bookedDate: '', override: 'Completed' });
+    const [newHistoryDate, setNewHistoryDate] = useState('');
 
     useEffect(() => {
       const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -79,17 +80,26 @@ export default function TrainingMatrix() {
         const courseRoles = course.roles || ['Nurse', 'HCA', 'ANP'];
         if (!courseRoles.includes(staffRole)) return { status: 'N/A', auto: true };
 
-        if (!record || (!record.date && !record.bookedDate && record.override !== 'N/A')) return { status: 'Expired/Missing' };
+        if (!record) return { status: 'Expired/Missing' };
         if (record.override === 'N/A') return { status: 'N/A', auto: false };
 
-        let completedDateStr = record.date;
+        // Handle array migration for calculations
+        let history = record.history ? [...record.history] : [];
+        if (record.date && !history.includes(record.date)) {
+            history.push(record.date);
+        }
+        history.sort((a, b) => new Date(b) - new Date(a));
+
+        let completedDateStr = history.length > 0 ? history[0] : null;
         let bookedDateStr = record.bookedDate;
         
-        // Handle backwards compatibility for shifts saved as 'Booked' before this update
+        // Handle backwards compatibility for shifts saved as 'Booked' before previous update
         if (record.override === 'Booked' && !record.bookedDate) {
             bookedDateStr = record.date;
             completedDateStr = null; 
         }
+
+        if (!completedDateStr && !bookedDateStr && record.override !== 'N/A') return { status: 'Expired/Missing' };
 
         let expiryDate = null;
         let diffDays = -1;
@@ -114,7 +124,7 @@ export default function TrainingMatrix() {
         if (bookedDateStr) {
             return { 
                 status: 'Booked', 
-                baseStatus: status, // Keep track of the underlying compliance
+                baseStatus: status, 
                 date: completedDateStr, 
                 bookedDate: bookedDateStr,
                 expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : (course.freq ? null : 'Never')
@@ -161,15 +171,27 @@ export default function TrainingMatrix() {
     };
 
     const handleCellOpen = (staffId, courseName, records) => {
-        let defaultForm = records[courseName] || { date: '', bookedDate: '', override: 'Completed' };
+        let defaultForm = records[courseName] ? { ...records[courseName] } : { history: [], bookedDate: '', override: 'Completed' };
         
-        // Backwards compatibility migration on open
         if (defaultForm.override === 'Booked' && !defaultForm.bookedDate) {
-             defaultForm = { date: '', bookedDate: defaultForm.date, override: 'Completed' };
+             defaultForm = { history: [], bookedDate: defaultForm.date || '', override: 'Completed' };
         }
+        
+        // Auto-migrate legacy 'date' to the 'history' array
+        if (defaultForm.date) {
+            const currentHistory = defaultForm.history || [];
+            if (!currentHistory.includes(defaultForm.date)) {
+                defaultForm.history = [...currentHistory, defaultForm.date];
+            }
+            delete defaultForm.date; // Clean up old structure
+        }
+        
+        if (!defaultForm.history) defaultForm.history = [];
+        defaultForm.history.sort((a, b) => new Date(b) - new Date(a));
         
         setSelectedCell({ staffId, courseName });
         setCellForm(defaultForm);
+        setNewHistoryDate('');
     };
 
     const handleSaveCell = () => {
@@ -181,7 +203,7 @@ export default function TrainingMatrix() {
                     records: {
                         ...(staff.records || {}),
                         [courseName]: { 
-                            date: cellForm.date, 
+                            history: cellForm.history, 
                             bookedDate: cellForm.bookedDate,
                             override: cellForm.override 
                         }
@@ -206,6 +228,17 @@ export default function TrainingMatrix() {
         });
         updateSharedStaff(newStaffList);
         setSelectedCell(null);
+    };
+
+    const addHistoryDate = () => {
+        if (!newHistoryDate) return;
+        const updatedHistory = [...cellForm.history, newHistoryDate].sort((a, b) => new Date(b) - new Date(a));
+        setCellForm({...cellForm, history: updatedHistory});
+        setNewHistoryDate('');
+    };
+
+    const removeHistoryDate = (dateToRemove) => {
+        setCellForm({...cellForm, history: cellForm.history.filter(d => d !== dateToRemove)});
     };
 
     const toggleRole = (rolesList, setRolesList, roleToToggle) => {
@@ -520,7 +553,7 @@ export default function TrainingMatrix() {
 
             {selectedCell && (
               <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-                <div className="bg-white rounded-xl shadow-xl p-6 w-96 max-w-[90vw]">
+                <div className="bg-white rounded-xl shadow-xl p-6 w-[420px] max-w-[95vw]">
                   <h3 className="text-lg font-bold mb-1">Update Training Record</h3>
                   <p className="text-sm text-slate-500 mb-4">
                     {staffList.find(s => s.id === selectedCell.staffId)?.name} • {selectedCell.courseName}
@@ -533,16 +566,35 @@ export default function TrainingMatrix() {
                             type="checkbox" 
                             className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                             checked={cellForm.override === 'N/A'}
-                            onChange={(e) => setCellForm({...cellForm, override: e.target.checked ? 'N/A' : 'Completed', date: '', bookedDate: ''})}
+                            onChange={(e) => setCellForm({...cellForm, override: e.target.checked ? 'N/A' : 'Completed', history: [], bookedDate: ''})}
                         />
                     </div>
 
                     {cellForm.override !== 'N/A' && (
                       <div className="space-y-4 pt-1">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Last Completed Date</label>
-                            <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={cellForm.date || ''} onChange={(e) => setCellForm({...cellForm, date: e.target.value})} />
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">Completed Dates Archive</label>
+                            
+                            <div className="flex gap-2 mb-3">
+                                <input type="date" className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white" value={newHistoryDate} onChange={(e) => setNewHistoryDate(e.target.value)} />
+                                <button onClick={addHistoryDate} disabled={!newHistoryDate} className="px-3 py-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-bold disabled:opacity-50 transition-colors shadow-sm">Add</button>
+                            </div>
+
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                {cellForm.history.length > 0 ? cellForm.history.map((d, i) => (
+                                    <div key={i} className="flex justify-between items-center bg-white p-2 border border-slate-200 rounded-md shadow-sm">
+                                        <span className="text-sm font-medium text-slate-700 flex items-center">
+                                            {i === 0 && <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider mr-2">Latest</span>}
+                                            {new Date(d).toLocaleDateString('en-GB')}
+                                        </span>
+                                        <button onClick={() => removeHistoryDate(d)} className="text-slate-400 hover:text-red-500 p-1"><X className="w-4 h-4" /></button>
+                                    </div>
+                                )) : (
+                                    <p className="text-xs text-slate-500 italic text-center py-2">No completed dates logged yet.</p>
+                                )}
+                            </div>
                         </div>
+                        
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-1">Upcoming Renewal Booked <span className="font-normal text-slate-400 text-xs ml-1">(Optional)</span></label>
                             <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-blue-50/50" value={cellForm.bookedDate || ''} onChange={(e) => setCellForm({...cellForm, bookedDate: e.target.value})} />
@@ -550,7 +602,7 @@ export default function TrainingMatrix() {
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-4">
+                    <div className="flex gap-2 pt-4 border-t border-slate-100 mt-4">
                       <button onClick={handleSaveCell} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-bold transition-colors disabled:opacity-50 shadow-sm">Save Record</button>
                       <button onClick={handleClearCell} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200" title="Clear Record"><Trash2 className="w-5 h-5" /></button>
                       <button onClick={() => setSelectedCell(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-lg font-bold transition-colors">Cancel</button>
