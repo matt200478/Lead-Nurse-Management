@@ -150,24 +150,24 @@ export default function StaffDirectory() {
   return (
     <div className="flex-1 bg-gray-50 min-h-full font-sans text-slate-800 p-4 md:p-8 overflow-x-auto print:bg-white print:p-0 print:overflow-visible">
       
-      {/* Injecting CSS specifically for A4 Landscape PDF Printing */}
+      {/* Injecting CSS specifically for compact A4 Landscape PDF Printing */}
       <style>
         {`
           @media print {
-            @page { size: A4 landscape; margin: 10mm; }
+            @page { size: A4 landscape; margin: 5mm; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         `}
       </style>
 
       <div className="min-w-[1000px] print:min-w-full print:w-full">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 print:mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 print:mb-2">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2 print:text-lg">
               <Contact className="w-7 h-7 text-indigo-600 print:hidden" />
               Staff Directory & Hours
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Manage personnel, view weekly working hours, and track compliance.</p>
+            <p className="text-sm text-slate-500 font-medium mt-1 print:text-xs print:mt-0">Manage personnel, view weekly working hours, and track compliance.</p>
           </div>
           
           {/* Action Buttons (Hidden on Print) */}
@@ -208,11 +208,11 @@ export default function StaffDirectory() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 print:bg-white print:border-slate-300">
-                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-48 print:shadow-none print:bg-white print:static print:w-auto">Staff Member</th>
+                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-48 print:shadow-none print:bg-white print:static print:w-auto print:p-2 print:text-xs">Staff Member</th>
                 {activeDays.map(day => (
-                  <th key={day} className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 min-w-[120px] print:min-w-0 print:border-slate-300">{day}</th>
+                  <th key={day} className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 min-w-[120px] print:min-w-0 print:border-slate-300 print:p-2 print:text-xs">{day}</th>
                 ))}
-                <th className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 w-32 print:border-slate-300">Compliance</th>
+                <th className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 w-32 print:border-slate-300 print:p-2 print:text-xs">Compliance</th>
                 <th className="p-4 font-bold text-slate-700 text-right w-16 print:hidden"></th>
               </tr>
             </thead>
@@ -222,35 +222,35 @@ export default function StaffDirectory() {
                 return (
                   <tr key={staff.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors print:break-inside-avoid print:border-slate-300 ${staff.status === 'Archived' ? 'bg-slate-50/50 opacity-60' : ''}`}>
                     <td 
-                      className="p-4 sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] cursor-pointer group print:shadow-none print:static print:align-top"
+                      className="p-4 sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] cursor-pointer group print:shadow-none print:static print:align-top print:p-2"
                       onClick={() => setEditingStaff(staff)}
                       title="Click to edit staff details"
                     >
-                      <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{staff.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{staff.role}</div>
-                      <div className="flex flex-wrap gap-1 mt-1.5">
+                      <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors print:text-xs">{staff.name}</div>
+                      <div className="text-xs text-slate-500 mt-0.5 print:text-[10px] print:mt-0">{staff.role}</div>
+                      <div className="flex flex-wrap gap-1 mt-1.5 print:mt-0.5">
                         {staff.requiresWeekends && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider print:border print:border-amber-300">Weekend Contract</span>}
-                        {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Archived</span>}
+                        {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider print:border print:border-slate-300">Archived</span>}
                       </div>
                     </td>
                     
                     {activeDays.map(day => {
                       const sched = staff.schedule?.[day];
                       if (!sched?.start || !sched?.end) {
-                        return <td key={day} className="p-2 border-l border-slate-100 align-middle text-center print:border-slate-300"><span className="text-slate-300 text-xs font-medium">Off</span></td>;
+                        return <td key={day} className="p-2 border-l border-slate-100 align-middle text-center print:border-slate-300 print:p-1"><span className="text-slate-300 text-xs font-medium print:text-[10px]">Off</span></td>;
                       }
                       
                       const { gross, net, isEA } = calculateHours(sched.start, sched.end);
                       return (
-                        <td key={day} className="p-2 border-l border-slate-100 align-top print:border-slate-300">
-                          <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 h-full relative group hover:border-indigo-200 transition-colors print:bg-white print:border-slate-300">
-                            <div className="font-bold text-slate-800 text-center mb-1">{sched.start} - {sched.end}</div>
-                            <div className="flex justify-between text-[10px] text-slate-500 px-1">
+                        <td key={day} className="p-2 border-l border-slate-100 align-top print:border-slate-300 print:p-1">
+                          <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 h-full relative group hover:border-indigo-200 transition-colors print:bg-white print:border-slate-300 print:p-1">
+                            <div className="font-bold text-slate-800 text-center mb-1 print:text-[10px] print:mb-0">{sched.start} - {sched.end}</div>
+                            <div className="flex justify-between text-[10px] text-slate-500 px-1 print:text-[8px] print:px-0">
                               <span>Gross: {gross.toFixed(1)}h</span>
                               <span className="font-bold text-indigo-600 print:text-black">Net: {net.toFixed(1)}h</span>
                             </div>
                             {isEA && (
-                              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm print:border print:border-indigo-600 print:text-indigo-600 print:bg-white" title="Evening Access">
+                              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm print:border print:border-indigo-600 print:text-indigo-600 print:bg-white print:static print:w-fit print:mx-auto print:mt-0.5" title="Evening Access">
                                 <Moon className="w-2.5 h-2.5 print:hidden" /> EA
                               </div>
                             )}
@@ -259,16 +259,16 @@ export default function StaffDirectory() {
                       );
                     })}
 
-                    <td className="p-3 border-l border-slate-100 align-middle print:border-slate-300">
-                      <div className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center print:bg-white ${compliance.isMet ? 'bg-emerald-50 border-emerald-200 text-emerald-800 print:border-slate-300' : 'bg-rose-50 border-rose-200 text-rose-800 print:border-slate-300'}`}>
+                    <td className="p-3 border-l border-slate-100 align-middle print:border-slate-300 print:p-1.5">
+                      <div className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center print:bg-white print:p-1 ${compliance.isMet ? 'bg-emerald-50 border-emerald-200 text-emerald-800 print:border-slate-300' : 'bg-rose-50 border-rose-200 text-rose-800 print:border-slate-300'}`}>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-black">{compliance.totalNet.toFixed(1)}</span>
-                          <span className="text-xs opacity-70">/ {compliance.target}h</span>
+                          <span className="text-lg font-black print:text-sm">{compliance.totalNet.toFixed(1)}</span>
+                          <span className="text-xs opacity-70 print:text-[10px]">/ {compliance.target}h</span>
                         </div>
                         {compliance.isMet ? (
-                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-emerald-600 print:text-slate-600"><CheckCircle className="w-3 h-3 print:hidden" /> Met</span>
+                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-emerald-600 print:text-slate-600 print:mt-0"><CheckCircle className="w-3 h-3 print:hidden" /> Met</span>
                         ) : (
-                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-rose-600 print:text-slate-600"><AlertCircle className="w-3 h-3 print:hidden" /> {Math.abs(compliance.diff).toFixed(1)}h short</span>
+                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-rose-600 print:text-slate-600 print:mt-0"><AlertCircle className="w-3 h-3 print:hidden" /> {Math.abs(compliance.diff).toFixed(1)}h short</span>
                         )}
                       </div>
                     </td>
