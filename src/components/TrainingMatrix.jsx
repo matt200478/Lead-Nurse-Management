@@ -20,12 +20,14 @@ export default function TrainingMatrix() {
     const [isManagingCourses, setIsManagingCourses] = useState(false);
     const [newCourseName, setNewCourseName] = useState('');
     const [newCourseFreq, setNewCourseFreq] = useState('12');
+    const [newCourseRoles, setNewCourseRoles] = useState(['Nurse', 'HCA', 'ANP']);
     const [courseToDelete, setCourseToDelete] = useState(null);
     
     // States for editing an existing course requirement
     const [editingCourseName, setEditingCourseName] = useState(null);
     const [editFormName, setEditFormName] = useState('');
     const [editFormFreq, setEditFormFreq] = useState('12');
+    const [editFormRoles, setEditFormRoles] = useState([]);
 
     const [selectedCell, setSelectedCell] = useState(null);
     const [cellForm, setCellForm] = useState({ date: '', override: 'Completed' });
@@ -74,15 +76,23 @@ export default function TrainingMatrix() {
         catch (e) { console.error("Database save failed:", e); }
     };
 
-    const calculateCellStatus = (record, courseFreq) => {
+    const calculateCellStatus = (record, course, staffRole) => {
+        // Backwards compatibility for older data lacking the roles array
+        const courseRoles = course.roles || ['Nurse', 'HCA', 'ANP'];
+        
+        // Auto-assign N/A if the staff member's role isn't required for this course
+        if (!courseRoles.includes(staffRole)) {
+            return { status: 'N/A', auto: true };
+        }
+
         if (!record || (!record.date && record.override !== 'N/A')) return { status: 'Expired/Missing' };
-        if (record.override === 'N/A') return { status: 'N/A' };
+        if (record.override === 'N/A') return { status: 'N/A', auto: false };
         if (record.override === 'Booked') return { status: 'Booked', date: record.date };
-        if (courseFreq === null) return { status: 'Valid', date: record.date, expiry: 'Never' };
+        if (course.freq === null) return { status: 'Valid', date: record.date, expiry: 'Never' };
 
         const compDate = new Date(record.date);
         const expiryDate = new Date(compDate);
-        expiryDate.setMonth(expiryDate.getMonth() + courseFreq);
+        expiryDate.setMonth(expiryDate.getMonth() + course.freq);
         
         const today = new Date();
         const diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
@@ -107,7 +117,7 @@ export default function TrainingMatrix() {
                 `"${staff.name}"`, `"${staff.role}"`, `"${staff.status || 'Active'}"`,
                 ...courses.map(c => {
                     const records = staff.records || {};
-                    const detail = calculateCellStatus(records[c.name], c.freq);
+                    const detail = calculateCellStatus(records[c.name], c, staff.role);
                     if (detail.status === 'N/A') return '"N/A"';
                     if (detail.status === 'Booked') return `"Booked: ${detail.date}"`;
                     if (!detail.date) return '""';
@@ -158,22 +168,35 @@ export default function TrainingMatrix() {
         setSelectedCell(null);
     };
 
+    const toggleRole = (rolesList, setRolesList, roleToToggle) => {
+        if (rolesList.includes(roleToToggle)) {
+            setRolesList(rolesList.filter(r => r !== roleToToggle));
+        } else {
+            setRolesList([...rolesList, roleToToggle]);
+        }
+    };
+
     const handleAddCourse = () => {
-      if (!newCourseName.trim() || courses.some(c => c.name.toLowerCase() === newCourseName.trim().toLowerCase())) return; 
-      updateCourses([...courses, { name: newCourseName.trim(), freq: newCourseFreq === 'Never' ? null : parseInt(newCourseFreq) }]);
+      if (!newCourseName.trim() || newCourseRoles.length === 0 || courses.some(c => c.name.toLowerCase() === newCourseName.trim().toLowerCase())) return; 
+      updateCourses([...courses, { 
+          name: newCourseName.trim(), 
+          freq: newCourseFreq === 'Never' ? null : parseInt(newCourseFreq),
+          roles: newCourseRoles
+      }]);
       setNewCourseName('');
+      setNewCourseRoles(['Nurse', 'HCA', 'ANP']); // Reset roles
     };
 
     const handleStartEditCourse = (course) => {
       setEditingCourseName(course.name);
       setEditFormName(course.name);
       setEditFormFreq(course.freq === null ? 'Never' : course.freq.toString());
+      setEditFormRoles(course.roles || ['Nurse', 'HCA', 'ANP']);
     };
 
     const handleSaveCourseEdit = () => {
-      if (!editFormName.trim()) return;
+      if (!editFormName.trim() || editFormRoles.length === 0) return;
 
-      // Check for renaming conflicts with other courses
       if (editFormName.trim().toLowerCase() !== editingCourseName.toLowerCase() && 
           courses.some(c => c.name.toLowerCase() === editFormName.trim().toLowerCase())) {
         return;
@@ -183,13 +206,13 @@ export default function TrainingMatrix() {
         if (c.name === editingCourseName) {
           return {
             name: editFormName.trim(),
-            freq: editFormFreq === 'Never' ? null : parseInt(editFormFreq)
+            freq: editFormFreq === 'Never' ? null : parseInt(editFormFreq),
+            roles: editFormRoles
           };
         }
         return c;
       });
 
-      // If the requirement name changed, migrate existing records in staff profiles automatically
       let updatedStaffList = [...staffList];
       if (editFormName.trim() !== editingCourseName) {
         updatedStaffList = staffList.map(staff => {
@@ -256,9 +279,9 @@ export default function TrainingMatrix() {
             if (sortConfig.key === 'name') {
                 aVal = a.name; bVal = b.name;
             } else {
-                const cFreq = courses.find(c => c.name === sortConfig.key)?.freq;
-                aVal = calculateCellStatus((a.records || {})[sortConfig.key], cFreq).status;
-                bVal = calculateCellStatus((b.records || {})[sortConfig.key], cFreq).status;
+                const c = courses.find(course => course.name === sortConfig.key);
+                aVal = calculateCellStatus((a.records || {})[sortConfig.key], c, a.role).status;
+                bVal = calculateCellStatus((b.records || {})[sortConfig.key], c, b.role).status;
             }
             if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -270,7 +293,7 @@ export default function TrainingMatrix() {
     filteredData.forEach(staff => {
         const records = staff.records || {};
         courses.forEach(c => {
-            const detail = calculateCellStatus(records[c.name], c.freq);
+            const detail = calculateCellStatus(records[c.name], c, staff.role);
             if (detail.status !== 'N/A') {
                 totalApplicable++;
                 if (detail.status === 'Valid') totalValid++;
@@ -411,12 +434,17 @@ export default function TrainingMatrix() {
                                         )}
                                     </td>
                                     {courses.map(course => {
-                                        const detail = calculateCellStatus(records[course.name], course.freq);
+                                        const detail = calculateCellStatus(records[course.name], course, staff.role);
                                         
                                         if (detail.status === 'N/A') {
                                             return (
-                                              <td key={course.name} onClick={() => { setSelectedCell({staffId: staff.id, courseName: course.name}); setCellForm(records[course.name] || { date: '', override: 'Completed' }); }} className="p-3 border-l border-slate-100 text-center bg-slate-50/30 print:bg-white cursor-pointer hover:bg-slate-100 group">
-                                                <span className="text-slate-300 font-medium text-xs group-hover:text-indigo-500">N/A</span>
+                                              <td 
+                                                key={course.name} 
+                                                onClick={detail.auto ? undefined : () => { setSelectedCell({staffId: staff.id, courseName: course.name}); setCellForm(records[course.name] || { date: '', override: 'Completed' }); }} 
+                                                className={`p-3 border-l border-slate-100 text-center ${detail.auto ? 'bg-slate-100/40 print:bg-white' : 'bg-slate-50/30 print:bg-white cursor-pointer hover:bg-slate-100 group'}`}
+                                                title={detail.auto ? 'Not required for this role' : ''}
+                                              >
+                                                <span className={`font-medium text-xs ${detail.auto ? 'text-slate-300' : 'text-slate-400 group-hover:text-indigo-500'}`}>N/A</span>
                                               </td>
                                             );
                                         }
@@ -486,7 +514,7 @@ export default function TrainingMatrix() {
 
             {isManagingCourses && (
               <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-                <div className="bg-white rounded-xl shadow-xl w-[520px] max-w-[90vw] max-h-[90vh] flex flex-col relative">
+                <div className="bg-white rounded-xl shadow-xl w-[560px] max-w-[95vw] max-h-[90vh] flex flex-col relative">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="text-lg font-bold">Manage Training Requirements</h3>
                     <button onClick={() => { setIsManagingCourses(false); setCourseToDelete(null); setEditingCourseName(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
@@ -494,9 +522,8 @@ export default function TrainingMatrix() {
                   
                   <div className="p-6 overflow-y-auto space-y-3 mb-4 flex-1">
                     {courses.map(course => (
-                      <div key={course.name} className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <div key={course.name} className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                         {editingCourseName === course.name ? (
-                          /* Inline Editing Form */
                           <div className="space-y-3 p-1">
                             <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Editing Requirement</div>
                             <div className="flex flex-col sm:flex-row gap-2">
@@ -517,21 +544,38 @@ export default function TrainingMatrix() {
                                 <option value="Never">Never Expires</option>
                               </select>
                             </div>
-                            <div className="flex gap-2 justify-end">
+                            
+                            <div className="flex flex-col gap-2 w-full mt-1 border-t border-indigo-100 pt-3">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">Applies To Roles:</div>
+                              <div className="flex gap-4">
+                                {['Nurse', 'HCA', 'ANP'].map(r => (
+                                  <label key={r} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                                    <input type="checkbox" checked={editFormRoles.includes(r)} onChange={() => toggleRole(editFormRoles, setEditFormRoles, r)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
+                                    {r}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 justify-end mt-2">
                               <button onClick={() => setEditingCourseName(null)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50">Cancel</button>
-                              <button onClick={handleSaveCourseEdit} disabled={!editFormName.trim()} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50">Save Changes</button>
+                              <button onClick={handleSaveCourseEdit} disabled={!editFormName.trim() || editFormRoles.length === 0} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50">Save Changes</button>
                             </div>
                           </div>
                         ) : (
-                          /* Standard Row Display */
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-sm flex-1 truncate">{course.name}</span>
-                            <span className="text-xs text-slate-500 bg-slate-200 px-2 py-1 rounded shrink-0">
+                            <div className="flex flex-col flex-1 min-w-0">
+                                <span className="font-bold text-sm text-slate-800 truncate">{course.name}</span>
+                                <span className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                    Applies to: {(course.roles || ['Nurse', 'HCA', 'ANP']).join(', ')}
+                                </span>
+                            </div>
+                            <span className="text-xs text-slate-600 font-medium bg-slate-200 px-2 py-1 rounded shrink-0">
                               {course.freq ? `Every ${course.freq}m` : 'Never Expires'}
                             </span>
                             <div className="flex gap-1 shrink-0 ml-2">
-                              <button onClick={() => handleStartEditCourse(course)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-all" title="Edit Requirement"><Edit2 className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => setCourseToDelete(course.name)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-all" title="Delete Requirement"><Trash2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => handleStartEditCourse(course)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 hover:shadow-sm transition-all" title="Edit Requirement"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => setCourseToDelete(course.name)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 hover:shadow-sm transition-all" title="Delete Requirement"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           </div>
                         )}
@@ -539,19 +583,29 @@ export default function TrainingMatrix() {
                     ))}
                   </div>
 
-                  {/* Add New Requirement Footer Area */}
                   {!editingCourseName && (
                     <div className="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl">
-                      <h4 className="text-sm font-bold mb-3">Add New Requirement</h4>
-                      <div className="flex gap-2">
-                        <input type="text" placeholder="Course Name" className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 min-w-0" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} />
-                        <select className="w-32 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 shrink-0" value={newCourseFreq} onChange={(e) => setNewCourseFreq(e.target.value)}>
-                          <option value="12">12 Months</option>
-                          <option value="24">24 Months</option>
-                          <option value="36">36 Months</option>
-                          <option value="Never">Never Expires</option>
-                        </select>
-                        <button onClick={handleAddCourse} disabled={!newCourseName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50"><Plus className="w-5 h-5" /></button>
+                      <h4 className="text-sm font-bold mb-3 text-slate-800">Add New Requirement</h4>
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                            <input type="text" placeholder="Course Name" className="flex-1 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 min-w-0" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} />
+                            <select className="w-32 p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-indigo-500 shrink-0" value={newCourseFreq} onChange={(e) => setNewCourseFreq(e.target.value)}>
+                            <option value="12">12 Months</option>
+                            <option value="24">24 Months</option>
+                            <option value="36">36 Months</option>
+                            <option value="Never">Never Expires</option>
+                            </select>
+                            <button onClick={handleAddCourse} disabled={!newCourseName.trim() || newCourseRoles.length === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50 shadow-sm"><Plus className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex items-center gap-4 bg-white p-3 border border-slate-200 rounded-lg shadow-sm">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Applies to:</span>
+                            {['Nurse', 'HCA', 'ANP'].map(r => (
+                            <label key={r} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                                <input type="checkbox" checked={newCourseRoles.includes(r)} onChange={() => toggleRole(newCourseRoles, setNewCourseRoles, r)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
+                                {r}
+                            </label>
+                            ))}
+                        </div>
                       </div>
                     </div>
                   )}
