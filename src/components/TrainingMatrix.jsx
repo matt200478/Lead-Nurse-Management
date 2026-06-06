@@ -23,14 +23,13 @@ export default function TrainingMatrix() {
     const [newCourseRoles, setNewCourseRoles] = useState(['Nurse', 'HCA', 'ANP']);
     const [courseToDelete, setCourseToDelete] = useState(null);
     
-    // States for editing an existing course requirement
     const [editingCourseName, setEditingCourseName] = useState(null);
     const [editFormName, setEditFormName] = useState('');
     const [editFormFreq, setEditFormFreq] = useState('12');
     const [editFormRoles, setEditFormRoles] = useState([]);
 
     const [selectedCell, setSelectedCell] = useState(null);
-    const [cellForm, setCellForm] = useState({ date: '', override: 'Completed' });
+    const [cellForm, setCellForm] = useState({ date: '', bookedDate: '', override: 'Completed' });
 
     useEffect(() => {
       const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -77,31 +76,56 @@ export default function TrainingMatrix() {
     };
 
     const calculateCellStatus = (record, course, staffRole) => {
-        // Backwards compatibility for older data lacking the roles array
         const courseRoles = course.roles || ['Nurse', 'HCA', 'ANP'];
+        if (!courseRoles.includes(staffRole)) return { status: 'N/A', auto: true };
+
+        if (!record || (!record.date && !record.bookedDate && record.override !== 'N/A')) return { status: 'Expired/Missing' };
+        if (record.override === 'N/A') return { status: 'N/A', auto: false };
+
+        let completedDateStr = record.date;
+        let bookedDateStr = record.bookedDate;
         
-        // Auto-assign N/A if the staff member's role isn't required for this course
-        if (!courseRoles.includes(staffRole)) {
-            return { status: 'N/A', auto: true };
+        // Handle backwards compatibility for shifts saved as 'Booked' before this update
+        if (record.override === 'Booked' && !record.bookedDate) {
+            bookedDateStr = record.date;
+            completedDateStr = null; 
         }
 
-        if (!record || (!record.date && record.override !== 'N/A')) return { status: 'Expired/Missing' };
-        if (record.override === 'N/A') return { status: 'N/A', auto: false };
-        if (record.override === 'Booked') return { status: 'Booked', date: record.date };
-        if (course.freq === null) return { status: 'Valid', date: record.date, expiry: 'Never' };
+        let expiryDate = null;
+        let diffDays = -1;
 
-        const compDate = new Date(record.date);
-        const expiryDate = new Date(compDate);
-        expiryDate.setMonth(expiryDate.getMonth() + course.freq);
-        
-        const today = new Date();
-        const diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+        if (completedDateStr && course.freq) {
+            const compDate = new Date(completedDateStr);
+            expiryDate = new Date(compDate);
+            expiryDate.setMonth(expiryDate.getMonth() + course.freq);
+            const today = new Date();
+            diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+        }
 
         let status = 'Valid';
-        if (diffDays < 0) status = 'Expired/Missing';
-        else if (diffDays <= 30) status = 'Expiring Soon';
+        if (!completedDateStr) {
+            status = 'Expired/Missing';
+        } else if (diffDays < 0 && course.freq) {
+            status = 'Expired/Missing';
+        } else if (diffDays <= 30 && course.freq) {
+            status = 'Expiring Soon';
+        }
 
-        return { status, date: record.date, expiry: expiryDate.toISOString().split('T')[0] };
+        if (bookedDateStr) {
+            return { 
+                status: 'Booked', 
+                baseStatus: status, // Keep track of the underlying compliance
+                date: completedDateStr, 
+                bookedDate: bookedDateStr,
+                expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : (course.freq ? null : 'Never')
+            };
+        }
+
+        return { 
+            status, 
+            date: completedDateStr, 
+            expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : 'Never' 
+        };
     };
 
     const handleSort = (key) => {
@@ -119,7 +143,7 @@ export default function TrainingMatrix() {
                     const records = staff.records || {};
                     const detail = calculateCellStatus(records[c.name], c, staff.role);
                     if (detail.status === 'N/A') return '"N/A"';
-                    if (detail.status === 'Booked') return `"Booked: ${detail.date}"`;
+                    if (detail.status === 'Booked') return `"Booked: ${detail.bookedDate}"`;
                     if (!detail.date) return '""';
                     return `"${detail.date}"`;
                 }),
@@ -136,6 +160,18 @@ export default function TrainingMatrix() {
         document.body.removeChild(link);
     };
 
+    const handleCellOpen = (staffId, courseName, records) => {
+        let defaultForm = records[courseName] || { date: '', bookedDate: '', override: 'Completed' };
+        
+        // Backwards compatibility migration on open
+        if (defaultForm.override === 'Booked' && !defaultForm.bookedDate) {
+             defaultForm = { date: '', bookedDate: defaultForm.date, override: 'Completed' };
+        }
+        
+        setSelectedCell({ staffId, courseName });
+        setCellForm(defaultForm);
+    };
+
     const handleSaveCell = () => {
         const { staffId, courseName } = selectedCell;
         const newStaffList = staffList.map(staff => {
@@ -144,7 +180,11 @@ export default function TrainingMatrix() {
                     ...staff,
                     records: {
                         ...(staff.records || {}),
-                        [courseName]: { date: cellForm.date, override: cellForm.override }
+                        [courseName]: { 
+                            date: cellForm.date, 
+                            bookedDate: cellForm.bookedDate,
+                            override: cellForm.override 
+                        }
                     }
                 };
             }
@@ -184,7 +224,7 @@ export default function TrainingMatrix() {
           roles: newCourseRoles
       }]);
       setNewCourseName('');
-      setNewCourseRoles(['Nurse', 'HCA', 'ANP']); // Reset roles
+      setNewCourseRoles(['Nurse', 'HCA', 'ANP']);
     };
 
     const handleStartEditCourse = (course) => {
@@ -440,7 +480,7 @@ export default function TrainingMatrix() {
                                             return (
                                               <td 
                                                 key={course.name} 
-                                                onClick={detail.auto ? undefined : () => { setSelectedCell({staffId: staff.id, courseName: course.name}); setCellForm(records[course.name] || { date: '', override: 'Completed' }); }} 
+                                                onClick={detail.auto ? undefined : () => handleCellOpen(staff.id, course.name, records)} 
                                                 className={`p-3 border-l border-slate-100 text-center ${detail.auto ? 'bg-slate-100/40 print:bg-white' : 'bg-slate-50/30 print:bg-white cursor-pointer hover:bg-slate-100 group'}`}
                                                 title={detail.auto ? 'Not required for this role' : ''}
                                               >
@@ -451,7 +491,7 @@ export default function TrainingMatrix() {
                                         return (
                                             <td 
                                               key={course.name} 
-                                              onClick={() => { setSelectedCell({staffId: staff.id, courseName: course.name}); setCellForm(records[course.name] || { date: '', override: 'Completed' }); }}
+                                              onClick={() => handleCellOpen(staff.id, course.name, records)}
                                               className="p-2 border-l border-slate-100 align-top min-w-[120px] cursor-pointer hover:bg-slate-50 transition-colors"
                                             >
                                                 <div className={`p-2 rounded-lg border ${getStatusStyle(detail.status)} flex flex-col justify-center h-full print:border-slate-400 print:text-black print:bg-white transition-transform hover:scale-[1.02]`}>
@@ -459,8 +499,9 @@ export default function TrainingMatrix() {
                                                         {getStatusIcon(detail.status)}
                                                         <span className="truncate">{detail.status}</span>
                                                     </div>
-                                                    {detail.date && <div className="text-[10px] mt-1 opacity-80 font-medium">Done: {new Date(detail.date).toLocaleDateString('en-GB')}</div>}
-                                                    {detail.expiry && <div className="text-[10px] opacity-80 font-bold mt-0.5">Exp: {detail.expiry === 'Never' ? 'Never' : new Date(detail.expiry).toLocaleDateString('en-GB')}</div>}
+                                                    {detail.bookedDate && <div className="text-[10px] mt-1 font-bold text-blue-700">Booked: {new Date(detail.bookedDate).toLocaleDateString('en-GB')}</div>}
+                                                    {detail.date && <div className="text-[10px] mt-0.5 opacity-80 font-medium">Done: {new Date(detail.date).toLocaleDateString('en-GB')}</div>}
+                                                    {detail.expiry && <div className={`text-[10px] font-bold mt-0.5 ${detail.baseStatus === 'Expired/Missing' ? 'text-red-600' : 'opacity-80'}`}>Exp: {detail.expiry === 'Never' ? 'Never' : new Date(detail.expiry).toLocaleDateString('en-GB')}</div>}
                                                 </div>
                                             </td>
                                         );
@@ -486,26 +527,33 @@ export default function TrainingMatrix() {
                   </p>
 
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Status</label>
-                      <select className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={cellForm.override} onChange={(e) => setCellForm({...cellForm, override: e.target.value})}>
-                        <option value="Completed">Completed</option>
-                        <option value="Booked">Booked (Upcoming)</option>
-                        <option value="N/A">Not Applicable</option>
-                      </select>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <label className="text-sm font-bold text-slate-700">Not Applicable (Exempt)</label>
+                        <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            checked={cellForm.override === 'N/A'}
+                            onChange={(e) => setCellForm({...cellForm, override: e.target.checked ? 'N/A' : 'Completed', date: '', bookedDate: ''})}
+                        />
                     </div>
 
                     {cellForm.override !== 'N/A' && (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">{cellForm.override === 'Booked' ? 'Booking Date' : 'Date Completed'}</label>
-                        <input type="date" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={cellForm.date} onChange={(e) => setCellForm({...cellForm, date: e.target.value})} />
+                      <div className="space-y-4 pt-1">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Last Completed Date</label>
+                            <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={cellForm.date || ''} onChange={(e) => setCellForm({...cellForm, date: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Upcoming Renewal Booked <span className="font-normal text-slate-400 text-xs ml-1">(Optional)</span></label>
+                            <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-blue-50/50" value={cellForm.bookedDate || ''} onChange={(e) => setCellForm({...cellForm, bookedDate: e.target.value})} />
+                        </div>
                       </div>
                     )}
 
                     <div className="flex gap-2 pt-4">
-                      <button onClick={handleSaveCell} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50">Save</button>
-                      <button onClick={handleClearCell} className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200" title="Clear Record"><Trash2 className="w-5 h-5" /></button>
-                      <button onClick={() => setSelectedCell(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-medium transition-colors">Cancel</button>
+                      <button onClick={handleSaveCell} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-bold transition-colors disabled:opacity-50 shadow-sm">Save Record</button>
+                      <button onClick={handleClearCell} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200" title="Clear Record"><Trash2 className="w-5 h-5" /></button>
+                      <button onClick={() => setSelectedCell(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-lg font-bold transition-colors">Cancel</button>
                     </div>
                   </div>
                 </div>
@@ -546,7 +594,7 @@ export default function TrainingMatrix() {
                             </div>
                             
                             <div className="flex flex-col gap-2 w-full mt-1 border-t border-indigo-100 pt-3">
-                              <div className="text-[10px] font-bold text-slate-500 uppercase">Applies To Roles:</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Applies To Roles:</div>
                               <div className="flex gap-4">
                                 {['Nurse', 'HCA', 'ANP'].map(r => (
                                   <label key={r} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
