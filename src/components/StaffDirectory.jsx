@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock, Printer } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -148,24 +148,44 @@ export default function StaffDirectory() {
   }
 
   return (
-    <div className="flex-1 bg-gray-50 min-h-full font-sans text-slate-800 p-4 md:p-8 overflow-x-auto">
-      <div className="min-w-[1000px]">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="flex-1 bg-gray-50 min-h-full font-sans text-slate-800 p-4 md:p-8 overflow-x-auto print:bg-white print:p-0 print:overflow-visible">
+      
+      {/* Injecting CSS specifically for A4 Landscape PDF Printing */}
+      <style>
+        {`
+          @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        `}
+      </style>
+
+      <div className="min-w-[1000px] print:min-w-full print:w-full">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 print:mb-4">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-              <Contact className="w-7 h-7 text-indigo-600" />
+              <Contact className="w-7 h-7 text-indigo-600 print:hidden" />
               Staff Directory & Hours
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">Manage personnel, view weekly working hours, and track compliance.</p>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          
+          {/* Action Buttons (Hidden on Print) */}
+          <div className="flex items-center gap-3 w-full md:w-auto print:hidden flex-wrap">
+            <button 
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 rounded-lg font-medium shadow-sm transition-all"
+              title="Save as PDF or Print"
+            >
+              <Printer className="w-4 h-4" /> Export PDF
+            </button>
             <button 
               onClick={() => setShowWeekends(!showWeekends)} 
               className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg shadow-sm font-medium transition-colors ${showWeekends ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'}`}
             >
               <CalendarDays className="w-4 h-4" /> {showWeekends ? 'Hide Weekends' : 'Show Weekends'}
             </button>
-            <div className="relative flex-1 md:w-64">
+            <div className="relative flex-1 md:w-64 min-w-[200px]">
               <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
               <input 
                 type="text" 
@@ -177,39 +197,39 @@ export default function StaffDirectory() {
             </div>
             <button 
               onClick={() => setEditingStaff({ name: '', role: 'Nurse', status: 'Active', contractedHours: 37.5, requiresWeekends: false, schedule: {} })} 
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-sm hover:bg-indigo-700 transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-sm hover:bg-indigo-700 transition-all whitespace-nowrap"
             >
               <Plus className="w-4 h-4" /> Add Staff
             </button>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+        <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden print:border-none print:shadow-none print:overflow-visible">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-48">Staff Member</th>
+              <tr className="bg-slate-50 border-b border-slate-200 print:bg-white print:border-slate-300">
+                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-48 print:shadow-none print:bg-white print:static print:w-auto">Staff Member</th>
                 {activeDays.map(day => (
-                  <th key={day} className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 min-w-[120px]">{day}</th>
+                  <th key={day} className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 min-w-[120px] print:min-w-0 print:border-slate-300">{day}</th>
                 ))}
-                <th className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 w-32">Compliance</th>
-                <th className="p-4 font-bold text-slate-700 text-right w-16"></th>
+                <th className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 w-32 print:border-slate-300">Compliance</th>
+                <th className="p-4 font-bold text-slate-700 text-right w-16 print:hidden"></th>
               </tr>
             </thead>
             <tbody>
               {filteredStaff.length > 0 ? filteredStaff.map(staff => {
                 const compliance = calculateWeeklyCompliance(staff);
                 return (
-                  <tr key={staff.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${staff.status === 'Archived' ? 'bg-slate-50/50 opacity-60' : ''}`}>
+                  <tr key={staff.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors print:break-inside-avoid print:border-slate-300 ${staff.status === 'Archived' ? 'bg-slate-50/50 opacity-60' : ''}`}>
                     <td 
-                      className="p-4 sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] cursor-pointer group"
+                      className="p-4 sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] cursor-pointer group print:shadow-none print:static print:align-top"
                       onClick={() => setEditingStaff(staff)}
                       title="Click to edit staff details"
                     >
                       <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{staff.name}</div>
                       <div className="text-xs text-slate-500 mt-0.5">{staff.role}</div>
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {staff.requiresWeekends && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Weekend Contract</span>}
+                        {staff.requiresWeekends && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider print:border print:border-amber-300">Weekend Contract</span>}
                         {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Archived</span>}
                       </div>
                     </td>
@@ -217,21 +237,21 @@ export default function StaffDirectory() {
                     {activeDays.map(day => {
                       const sched = staff.schedule?.[day];
                       if (!sched?.start || !sched?.end) {
-                        return <td key={day} className="p-2 border-l border-slate-100 align-middle text-center"><span className="text-slate-300 text-xs font-medium">Off</span></td>;
+                        return <td key={day} className="p-2 border-l border-slate-100 align-middle text-center print:border-slate-300"><span className="text-slate-300 text-xs font-medium">Off</span></td>;
                       }
                       
                       const { gross, net, isEA } = calculateHours(sched.start, sched.end);
                       return (
-                        <td key={day} className="p-2 border-l border-slate-100 align-top">
-                          <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 h-full relative group hover:border-indigo-200 transition-colors">
+                        <td key={day} className="p-2 border-l border-slate-100 align-top print:border-slate-300">
+                          <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 h-full relative group hover:border-indigo-200 transition-colors print:bg-white print:border-slate-300">
                             <div className="font-bold text-slate-800 text-center mb-1">{sched.start} - {sched.end}</div>
                             <div className="flex justify-between text-[10px] text-slate-500 px-1">
                               <span>Gross: {gross.toFixed(1)}h</span>
-                              <span className="font-bold text-indigo-600">Net: {net.toFixed(1)}h</span>
+                              <span className="font-bold text-indigo-600 print:text-black">Net: {net.toFixed(1)}h</span>
                             </div>
                             {isEA && (
-                              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm" title="Evening Access">
-                                <Moon className="w-2.5 h-2.5" /> EA
+                              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm print:border print:border-indigo-600 print:text-indigo-600 print:bg-white" title="Evening Access">
+                                <Moon className="w-2.5 h-2.5 print:hidden" /> EA
                               </div>
                             )}
                           </div>
@@ -239,21 +259,21 @@ export default function StaffDirectory() {
                       );
                     })}
 
-                    <td className="p-3 border-l border-slate-100 align-middle">
-                      <div className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center ${compliance.isMet ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                    <td className="p-3 border-l border-slate-100 align-middle print:border-slate-300">
+                      <div className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center print:bg-white ${compliance.isMet ? 'bg-emerald-50 border-emerald-200 text-emerald-800 print:border-slate-300' : 'bg-rose-50 border-rose-200 text-rose-800 print:border-slate-300'}`}>
                         <div className="flex items-baseline gap-1">
                           <span className="text-lg font-black">{compliance.totalNet.toFixed(1)}</span>
                           <span className="text-xs opacity-70">/ {compliance.target}h</span>
                         </div>
                         {compliance.isMet ? (
-                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-emerald-600"><CheckCircle className="w-3 h-3" /> Met</span>
+                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-emerald-600 print:text-slate-600"><CheckCircle className="w-3 h-3 print:hidden" /> Met</span>
                         ) : (
-                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-rose-600"><AlertCircle className="w-3 h-3" /> {Math.abs(compliance.diff).toFixed(1)}h short</span>
+                          <span className="text-[10px] font-bold mt-1 flex items-center gap-1 text-rose-600 print:text-slate-600"><AlertCircle className="w-3 h-3 print:hidden" /> {Math.abs(compliance.diff).toFixed(1)}h short</span>
                         )}
                       </div>
                     </td>
 
-                    <td className="p-4 text-right align-middle">
+                    <td className="p-4 text-right align-middle print:hidden">
                       <button onClick={() => setStaffToDelete(staff)} className="p-1.5 text-slate-400 hover:text-red-600 rounded bg-white hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </td>
                   </tr>
@@ -265,6 +285,7 @@ export default function StaffDirectory() {
           </table>
         </div>
 
+        {/* MODALS REMAIN UNCHANGED AND ARE HIDDEN DURING PRINT AUTOMATICALLY VIA tailwind print:hidden */}
         {editingStaff && (
           <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
             <div className="bg-white rounded-xl shadow-xl w-[700px] max-w-[95vw] max-h-[90vh] flex flex-col relative">
@@ -274,7 +295,6 @@ export default function StaffDirectory() {
               </div>
               
               <div className="p-6 overflow-y-auto space-y-6">
-                {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Full Name</label>
@@ -290,7 +310,6 @@ export default function StaffDirectory() {
                   </div>
                 </div>
 
-                {/* Contract & Status */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Contracted Hours</label>
@@ -311,7 +330,6 @@ export default function StaffDirectory() {
                   </div>
                 </div>
 
-                {/* Working Hours Input */}
                 <div>
                   <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2 border-b border-slate-100 pb-2"><Clock className="w-4 h-4 text-indigo-600" /> Standard Working Hours</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
