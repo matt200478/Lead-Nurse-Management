@@ -11,6 +11,7 @@ export default function TrainingMatrix() {
 
     const [courses, setCourses] = useState(INITIAL_TRAINING_COURSES);
     const [staffList, setStaffList] = useState([]); 
+    const [roles, setRoles] = useState([]); // Dynamic roles state
 
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -20,7 +21,7 @@ export default function TrainingMatrix() {
     const [isManagingCourses, setIsManagingCourses] = useState(false);
     const [newCourseName, setNewCourseName] = useState('');
     const [newCourseFreq, setNewCourseFreq] = useState('12');
-    const [newCourseRoles, setNewCourseRoles] = useState(['Nurse', 'HCA', 'ANP']);
+    const [newCourseRoles, setNewCourseRoles] = useState([]);
     const [courseToDelete, setCourseToDelete] = useState(null);
     
     const [editingCourseName, setEditingCourseName] = useState(null);
@@ -49,8 +50,16 @@ export default function TrainingMatrix() {
             });
 
             const unsubShared = onSnapshot(getRotaDocRef(), (docSnap) => {
-                if (docSnap.exists() && docSnap.data().staffList) {
-                    setStaffList(docSnap.data().staffList);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.staffList) setStaffList(data.staffList);
+                    if (data.roles) {
+                        setRoles(data.roles);
+                        // Initialize newCourseRoles default if it's empty
+                        if (newCourseRoles.length === 0) {
+                            setNewCourseRoles(data.roles.map(r => r.name));
+                        }
+                    }
                 }
                 setIsDbLoaded(true);
             });
@@ -60,7 +69,7 @@ export default function TrainingMatrix() {
             console.error("Sync error:", e);
             setIsDbLoaded(true);
         }
-    }, [user]);
+    }, [user, newCourseRoles.length]);
 
     const updateSharedStaff = async (newStaffList) => {
         if (!user) return;
@@ -77,7 +86,8 @@ export default function TrainingMatrix() {
     };
 
     const calculateCellStatus = (record, course, staffRole) => {
-        const courseRoles = course.roles || ['Nurse', 'HCA', 'ANP'];
+        // Fallback to all active dynamic roles if the course doesn't have an array
+        const courseRoles = course.roles || roles.map(r => r.name);
         if (!courseRoles.includes(staffRole)) return { status: 'N/A', auto: true };
 
         if (!record) return { status: 'Expired/Missing' };
@@ -257,14 +267,15 @@ export default function TrainingMatrix() {
           roles: newCourseRoles
       }]);
       setNewCourseName('');
-      setNewCourseRoles(['Nurse', 'HCA', 'ANP']);
+      setNewCourseRoles(roles.map(r => r.name)); // Reset to all dynamic roles
     };
 
     const handleStartEditCourse = (course) => {
       setEditingCourseName(course.name);
       setEditFormName(course.name);
       setEditFormFreq(course.freq === null ? 'Never' : course.freq.toString());
-      setEditFormRoles(course.roles || ['Nurse', 'HCA', 'ANP']);
+      // Fallback for legacy courses
+      setEditFormRoles(course.roles || roles.map(r => r.name));
     };
 
     const handleSaveCourseEdit = () => {
@@ -448,14 +459,14 @@ export default function TrainingMatrix() {
                 </div>
 
                 <div className="mb-4 flex flex-wrap gap-2 pb-2 print:hidden justify-between items-center">
-                    <div className="flex gap-2">
-                        {['All', 'Nurse', 'HCA', 'ANP'].map(role => (
+                    <div className="flex gap-2 flex-wrap">
+                        {['All', ...roles.map(r => r.name)].map(role => (
                             <button 
                                 key={role}
                                 onClick={() => setFilter(role)}
                                 className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${filter === role ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
                             >
-                                {role}s
+                                {role === 'All' ? 'All' : `${role}s`}
                             </button>
                         ))}
                     </div>
@@ -647,11 +658,11 @@ export default function TrainingMatrix() {
                             
                             <div className="flex flex-col gap-2 w-full mt-1 border-t border-indigo-100 pt-3">
                               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Applies To Roles:</div>
-                              <div className="flex gap-4">
-                                {['Nurse', 'HCA', 'ANP'].map(r => (
-                                  <label key={r} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
-                                    <input type="checkbox" checked={editFormRoles.includes(r)} onChange={() => toggleRole(editFormRoles, setEditFormRoles, r)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
-                                    {r}
+                              <div className="flex gap-4 flex-wrap">
+                                {roles.map(r => (
+                                  <label key={r.id} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                                    <input type="checkbox" checked={editFormRoles.includes(r.name)} onChange={() => toggleRole(editFormRoles, setEditFormRoles, r.name)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
+                                    {r.name}
                                   </label>
                                 ))}
                               </div>
@@ -667,7 +678,7 @@ export default function TrainingMatrix() {
                             <div className="flex flex-col flex-1 min-w-0">
                                 <span className="font-bold text-sm text-slate-800 truncate">{course.name}</span>
                                 <span className="text-[10px] text-slate-500 font-medium mt-0.5">
-                                    Applies to: {(course.roles || ['Nurse', 'HCA', 'ANP']).join(', ')}
+                                    Applies to: {(course.roles || roles.map(r => r.name)).join(', ')}
                                 </span>
                             </div>
                             <span className="text-xs text-slate-600 font-medium bg-slate-200 px-2 py-1 rounded shrink-0">
@@ -697,12 +708,12 @@ export default function TrainingMatrix() {
                             </select>
                             <button onClick={handleAddCourse} disabled={!newCourseName.trim() || newCourseRoles.length === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50 shadow-sm"><Plus className="w-5 h-5" /></button>
                         </div>
-                        <div className="flex items-center gap-4 bg-white p-3 border border-slate-200 rounded-lg shadow-sm">
+                        <div className="flex items-center gap-4 flex-wrap bg-white p-3 border border-slate-200 rounded-lg shadow-sm">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Applies to:</span>
-                            {['Nurse', 'HCA', 'ANP'].map(r => (
-                            <label key={r} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
-                                <input type="checkbox" checked={newCourseRoles.includes(r)} onChange={() => toggleRole(newCourseRoles, setNewCourseRoles, r)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
-                                {r}
+                            {roles.map(r => (
+                            <label key={r.id} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                                <input type="checkbox" checked={newCourseRoles.includes(r.name)} onChange={() => toggleRole(newCourseRoles, setNewCourseRoles, r.name)} className="rounded text-indigo-600 w-3.5 h-3.5 focus:ring-indigo-500" />
+                                {r.name}
                             </label>
                             ))}
                         </div>
