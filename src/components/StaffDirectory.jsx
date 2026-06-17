@@ -11,6 +11,7 @@ export default function StaffDirectory() {
   
   const [staffList, setStaffList] = useState(INITIAL_UNIFIED_STAFF);
   const [schedulesByWeek, setSchedulesByWeek] = useState({});
+  const [roles, setRoles] = useState([]); // Added state for dynamic roles
   
   const [searchQuery, setSearchQuery] = useState('');
   const [editingStaff, setEditingStaff] = useState(null);
@@ -32,6 +33,7 @@ export default function StaffDirectory() {
           const data = docSnap.data();
           if (data.staffList) setStaffList(data.staffList);
           if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
+          if (data.roles) setRoles(data.roles); // Pull roles from DB
         } else {
           setDoc(getRotaDocRef(), {
             targets: INITIAL_TARGETS,
@@ -60,11 +62,14 @@ export default function StaffDirectory() {
   const handleSaveStaff = () => {
     if (!editingStaff.name.trim()) return;
     
+    // Default to the first role in the array if somehow left blank
+    const defaultRole = roles.length > 0 ? roles[0].name : 'Nurse';
+    
     const staffToSave = {
       ...editingStaff,
       records: editingStaff.records || {},
       skills: editingStaff.skills || [],
-      role: editingStaff.role || 'Nurse',
+      role: editingStaff.role || defaultRole,
       status: editingStaff.status || 'Active',
       contractedHours: parseFloat(editingStaff.contractedHours) || 0,
       requiresWeekends: editingStaff.requiresWeekends || false,
@@ -202,7 +207,7 @@ export default function StaffDirectory() {
               />
             </div>
             <button 
-              onClick={() => setEditingStaff({ name: '', role: 'Nurse', status: 'Active', contractedHours: 37.5, requiresWeekends: false, schedule: {} })} 
+              onClick={() => setEditingStaff({ name: '', role: roles.length > 0 ? roles[0].name : 'Nurse', status: 'Active', contractedHours: 37.5, requiresWeekends: false, schedule: {} })} 
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-sm hover:bg-indigo-700 transition-all whitespace-nowrap"
             >
               <Plus className="w-4 h-4" /> Add Staff
@@ -326,10 +331,18 @@ export default function StaffDirectory() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Role</label>
-                    <select className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={editingStaff.role} onChange={(e) => setEditingStaff({...editingStaff, role: e.target.value})}>
-                      <option value="Nurse">Nurse</option>
-                      <option value="HCA">HCA</option>
-                      <option value="ANP">ANP</option>
+                    <select 
+                      className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
+                      value={editingStaff.role} 
+                      onChange={(e) => setEditingStaff({...editingStaff, role: e.target.value})}
+                    >
+                      {roles.map(r => (
+                        <option key={r.id} value={r.name}>{r.name}</option>
+                      ))}
+                      {/* Fallback to show current role if it was deleted from settings */}
+                      {editingStaff.role && !roles.some(r => r.name === editingStaff.role) && (
+                        <option value={editingStaff.role}>{editingStaff.role} (Legacy)</option>
+                      )}
                     </select>
                   </div>
                 </div>
