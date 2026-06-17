@@ -1,119 +1,86 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X, User, CheckCircle, AlertCircle, Clock, Stethoscope } from 'lucide-react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X } from 'lucide-react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { auth, getRotaDocRef, getCoverDocRef } from '../firebase';
 
-const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function CoverBoard() {
   const [user, setUser] = useState(null);
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
   
-  const [authInstance, setAuthInstance] = useState(null);
-  const [rotaDocRef, setRotaDocRef] = useState(null);
-  const [coverDocRef, setCoverDocRef] = useState(null);
-
-  // Data States
-  const [availableShifts, setAvailableShifts] = useState([]);
   const [staffList, setStaffList] = useState([]);
-  const [schedulesByWeek, setSchedulesByWeek] = useState({});
+  const [roles, setRoles] = useState([]);
+  const [availableShifts, setAvailableShifts] = useState([]);
 
-  // UI States
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('lead_nurse'); // 'lead_nurse' | 'staff'
+  const [viewMode, setViewMode] = useState('lead'); 
   const [currentStaffId, setCurrentStaffId] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
 
-  // Modal States
-  const [isAddingShift, setIsAddingShift] = useState(false);
-  const [selectedDateStr, setSelectedDateStr] = useState('');
-  const [newShiftForm, setNewShiftForm] = useState({ role: 'HCA', start: '08:00', end: '13:00' });
-  
   const [viewShift, setViewShift] = useState(null);
+  const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
-  // --- Dynamic Module Resolution ---
+  const [newShift, setNewShift] = useState({ date: '', role: '', start: '', end: '', notes: '' });
+
   useEffect(() => {
-    const loadModules = async () => {
-      try {
-        const firebasePath = '../firebase';
-        const fb = await import(/* @vite-ignore */ firebasePath);
-        setAuthInstance(fb.auth);
-        setRotaDocRef(fb.getRotaDocRef());
-        setCoverDocRef(fb.getCoverBoardDocRef());
-      } catch (e) {
-        // Safe Canvas Environment Fallback
-        const localFirebaseConfig = {
-          apiKey: "AIzaSy" + "Bmh_DbR07Lga_oc2hAoMKnCYfBhE2C3FU",
-          authDomain: "lead-nurse-management.firebaseapp.com",
-          projectId: "lead-nurse-management",
-          storageBucket: "lead-nurse-management.firebasestorage.app",
-          messagingSenderId: "442233471706",
-          appId: "1:442233471706:web:ebc5301c40a54180279be3"
-        };
-        const fallbackApp = getApps().length === 0 ? initializeApp(localFirebaseConfig) : getApp();
-        const fallbackAuth = getAuth(fallbackApp);
-        signInAnonymously(fallbackAuth).catch(err => console.error(err));
-        setAuthInstance(fallbackAuth);
-        
-        const constructRef = (folder) => {
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
-          const segments = ['artifacts', ...appId.split('/'), 'public', 'data', 'clinic_rota', folder];
-          if (segments.length % 2 !== 0) segments.push('doc');
-          return doc(getFirestore(fallbackApp), ...segments);
-        };
-        setRotaDocRef(constructRef('shared_data'));
-        setCoverDocRef(constructRef('cover_board'));
-      }
-    };
-    loadModules();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!authInstance) return;
-    const unsubscribe = onAuthStateChanged(authInstance, setUser);
-    return () => unsubscribe();
-  }, [authInstance]);
+    if (!user) return;
+    let isMounted = true;
 
-  // Data Synchronisation
-  useEffect(() => {
-    if (!user || !rotaDocRef || !coverDocRef) return;
-    
-    const unsubRota = onSnapshot(rotaDocRef, (docSnap) => {
+    const unsubShared = onSnapshot(getRotaDocRef(), (docSnap) => {
       if (docSnap.exists()) {
-        if (docSnap.data().staffList) setStaffList(docSnap.data().staffList);
-        if (docSnap.data().schedulesByWeek) setSchedulesByWeek(docSnap.data().schedulesByWeek);
+        const data = docSnap.data();
+        if (data.staffList) setStaffList(data.staffList);
+        if (data.roles) {
+          setRoles(data.roles);
+          if (newShift.role === '' && data.roles.length > 0) {
+            setNewShift(prev => ({ ...prev, role: data.roles[0].name }));
+          }
+        }
       }
     });
 
-    const unsubCover = onSnapshot(coverDocRef, (docSnap) => {
+    const unsubCover = onSnapshot(getCoverDocRef(), (docSnap) => {
       if (docSnap.exists() && docSnap.data().shifts) {
         setAvailableShifts(docSnap.data().shifts);
       } else {
-        setDoc(coverDocRef, { shifts: [] }, { merge: true });
+        setDoc(getCoverDocRef(), { shifts: [] }, { merge: true });
       }
+      if (isMounted) setIsDbLoaded(true);
     });
 
-    return () => { unsubRota(); unsubCover(); };
-  }, [user, rotaDocRef, coverDocRef]);
+    return () => { isMounted = false; unsubShared(); unsubCover(); };
+  }, [user, newShift.role]);
 
-  // --- Actions ---
-  const handleAddShift = () => {
-    if (!selectedDateStr || !newShiftForm.start || !newShiftForm.end) return;
-    
-    const newShift = {
-      id: Date.now().toString(),
-      date: selectedDateStr,
-      role: newShiftForm.role,
-      start: newShiftForm.start,
-      end: newShiftForm.end,
+  const getRoleColorClass = (roleName) => {
+    const role = roles.find(r => r.name === roleName);
+    return role ? `${role.color} text-white shadow-sm border border-black/10` : 'bg-slate-500 text-white shadow-sm border border-black/10';
+  };
+
+  const handlePostShift = () => {
+    if (!newShift.date || !newShift.start || !newShift.end || !newShift.role) return;
+
+    const shiftId = Date.now().toString();
+    const shiftData = {
+      id: shiftId,
+      ...newShift,
       status: 'Open',
       claimedBy: null
     };
 
-    const updatedShifts = [...availableShifts, newShift];
-    updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
-    setIsAddingShift(false);
+    const updatedShifts = [...availableShifts, shiftData];
+    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+
+    setIsPostModalOpen(false);
+    setNewShift({ date: '', role: roles.length > 0 ? roles[0].name : '', start: '', end: '', notes: '' });
   };
 
   const handleClaimShift = (shiftId) => {
@@ -130,45 +97,7 @@ export default function CoverBoard() {
     const updatedShifts = availableShifts.map(s => 
       s.id === shiftId ? { ...s, status: 'Pending', claimedBy: Number(currentStaffId) } : s
     );
-    updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
-    setViewShift(null);
-  };
-  
-  const handleApproveShift = (shift) => {
-    // 1. Calculate which "Week Commencing" (Monday) this shift belongs to
-    const shiftDate = new Date(shift.date);
-    const dayOfWeek = shiftDate.getDay(); // 0 = Sun, 1 = Mon...
-    const diff = shiftDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(shiftDate.setDate(diff));
-    const wcString = monday.toISOString().split('T')[0]; // "YYYY-MM-DD"
-    
-    const stringDayName = DAYS_OF_WEEK[dayOfWeek === 0 ? 6 : dayOfWeek - 1];
-    
-    // 2. Add to Main Clinic Rota schedulesByWeek
-    let weekSchedule = schedulesByWeek[wcString] || { ...schedulesByWeek['master'] };
-    const shiftKey = `${shift.claimedBy}-${stringDayName}`;
-    
-    weekSchedule[shiftKey] = {
-      start: shift.start,
-      end: shift.end,
-      clinic: 'Cover Shift', // Label it clearly
-      roomId: ''
-    };
-
-    const updatedSchedules = { ...schedulesByWeek, [wcString]: weekSchedule };
-    updateDoc(rotaDocRef, { schedulesByWeek: updatedSchedules }).catch(console.error);
-
-    // 3. Mark as Approved on Cover Board
-    const updatedShifts = availableShifts.map(s => 
-      s.id === shift.id ? { ...s, status: 'Approved' } : s
-    );
-    updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
-    setViewShift(null);
-  };
-
-  const handleDeleteShift = (shiftId) => {
-    const updatedShifts = availableShifts.filter(s => s.id !== shiftId);
-    updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
+    updateDoc(getCoverDocRef(), { shifts: updatedShifts }).catch(console.error);
     setViewShift(null);
   };
 
@@ -176,173 +105,221 @@ export default function CoverBoard() {
     const updatedShifts = availableShifts.map(s => 
       s.id === shiftId ? { ...s, status: 'Open', claimedBy: null } : s
     );
-    updateDoc(coverDocRef, { shifts: updatedShifts }).catch(console.error);
+    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
     setViewShift(null);
   };
 
-  // --- Calendar Generation ---
-  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year, month) => {
-    let day = new Date(year, month, 1).getDay();
-    return day === 0 ? 6 : day - 1; // Map Sun=0 to Mon=0
+  // Helper function to calculate the ISO Week Key (YYYY-Www) for auto-syncing
+  const getWeekKey = (dateStr) => {
+      const date = new Date(dateStr);
+      const day = date.getDay() || 7; 
+      date.setDate(date.getDate() + 4 - day);
+      const year = date.getFullYear();
+      const firstDayOfYear = new Date(year, 0, 1);
+      const days = Math.floor((date - firstDayOfYear) / (24 * 60 * 60 * 1000));
+      const weekNum = Math.ceil((days + firstDayOfYear.getDay() + 1) / 7);
+      return `${year}-W${weekNum.toString().padStart(2, '0')}`;
   };
 
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-  const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
+  const handleApproveShift = async (shiftId) => {
+    const shiftToApprove = availableShifts.find(s => s.id === shiftId);
+    if (!shiftToApprove || !shiftToApprove.claimedBy) return;
 
-  const prevMonth = () => setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
+    try {
+      // 1. Mark as Approved on Cover Board
+      const updatedShifts = availableShifts.map(s => 
+        s.id === shiftId ? { ...s, status: 'Approved' } : s
+      );
+      await updateDoc(getCoverDocRef(), { shifts: updatedShifts });
 
-  // --- Helpers ---
-  const getRoleColors = (role, status) => {
-    if (status === 'Approved') return 'bg-slate-100 text-slate-400 border-slate-200';
-    if (status === 'Pending') return 'bg-amber-100 text-amber-700 border-amber-300';
-    
-    switch(role) {
-      case 'Nurse': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'HCA': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'ANP': return 'bg-purple-100 text-purple-700 border-purple-200';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+      // 2. Automatically sync to the Clinic Rota
+      const rotaSnap = await getDoc(getRotaDocRef());
+      if (rotaSnap.exists()) {
+          const rotaData = rotaSnap.data();
+          const schedulesByWeek = rotaData.schedulesByWeek || { 'master': {} };
+          
+          const weekKey = getWeekKey(shiftToApprove.date);
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const dayName = dayNames[new Date(shiftToApprove.date).getDay()];
+          const staffIdStr = shiftToApprove.claimedBy.toString();
+          
+          if (!schedulesByWeek[weekKey]) schedulesByWeek[weekKey] = {};
+          
+          if (!schedulesByWeek[weekKey][staffIdStr]) {
+              if (schedulesByWeek['master'] && schedulesByWeek['master'][staffIdStr]) {
+                  schedulesByWeek[weekKey][staffIdStr] = JSON.parse(JSON.stringify(schedulesByWeek['master'][staffIdStr]));
+              } else {
+                  schedulesByWeek[weekKey][staffIdStr] = {};
+              }
+          }
+          
+          schedulesByWeek[weekKey][staffIdStr][dayName] = {
+              start: shiftToApprove.start,
+              end: shiftToApprove.end,
+              isCover: true
+          };
+          
+          await updateDoc(getRotaDocRef(), { schedulesByWeek });
+      }
+      setViewShift(null);
+    } catch (e) {
+      console.error("Error approving shift:", e);
+      alert("Shift approved, but failed to sync to the Clinic Rota automatically.");
     }
   };
 
-  const getStaffName = (id) => staffList.find(s => s.id === id)?.name || 'Unknown';
+  const handleDeleteShift = (shiftId) => {
+    const updatedShifts = availableShifts.filter(s => s.id !== shiftId);
+    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+    setViewShift(null);
+  };
 
-const displayedShifts = availableShifts.filter(s => {
+  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  if (!isDbLoaded) {
+    return (
+      <div className="flex-1 bg-slate-50 flex items-center justify-center text-pink-600">
+        <Loader2 className="w-10 h-10 animate-spin mb-4" />
+      </div>
+    );
+  }
+
+  const daysInMonth = getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth());
+  const firstDay = getFirstDayOfMonth(currentDate.getFullYear(), currentDate.getMonth());
+  const startingBlankDays = firstDay === 0 ? 6 : firstDay - 1;
+
+  const displayedShifts = availableShifts.filter(s => {
     if (roleFilter !== 'All' && s.role !== roleFilter) return false;
-    // Don't show approved shifts on the board to avoid clutter
     if (s.status === 'Approved') return false; 
     return true;
   });
 
   return (
     <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* Header & Controls */}
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-200 pb-6">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-              <Stethoscope className="w-7 h-7 text-pink-600" />
+              <CalendarDays className="w-7 h-7 text-pink-600" />
               Shift Cover Board
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">
-              {viewMode === 'lead_nurse' 
-                ? "Manage available shifts and approve team requests." 
-                : "Browse and claim available extra shifts."}
-            </p>
+            <p className="text-sm text-slate-500 font-medium mt-1">Post open shifts and allow staff to proactively claim extra hours.</p>
           </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
-            {/* View Toggle */}
-            <div className="bg-slate-100 p-1 rounded-xl flex font-bold text-sm shadow-inner w-full sm:w-auto">
-              <button 
-                onClick={() => { setViewMode('lead_nurse'); setRoleFilter('All'); }}
-                className={`px-4 py-2 rounded-lg transition-all flex-1 ${viewMode === 'lead_nurse' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Lead Nurse
-              </button>
-              <button 
-                onClick={() => setViewMode('staff')}
-                className={`px-4 py-2 rounded-lg transition-all flex-1 ${viewMode === 'staff' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Staff Member
-              </button>
-            </div>
-
-            {/* Staff Selector (Only visible in Staff Mode) */}
-            {viewMode === 'staff' && (
-              <select 
-                value={currentStaffId} 
-                onChange={e => setCurrentStaffId(e.target.value)}
-                className="w-full sm:w-48 p-2.5 border border-indigo-200 bg-indigo-50 text-indigo-800 font-semibold rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">-- Who are you? --</option>
-                {staffList.filter(s => s.status !== 'Archived').map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          {['All', 'Nurse', 'HCA', 'ANP'].map(role => (
+          
+          <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
             <button 
-              key={role}
-              onClick={() => setRoleFilter(role)}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${roleFilter === role ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
+              onClick={() => setViewMode('lead')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'lead' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
             >
-              {role === 'All' ? 'All Roles' : `${role} Only`}
+              <ShieldCheck className="w-4 h-4" /> Lead Nurse
             </button>
-          ))}
+            <button 
+              onClick={() => setViewMode('staff')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'staff' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <User className="w-4 h-4" /> Staff Member
+            </button>
+          </div>
         </div>
 
-        {/* Calendar UI */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Calendar Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-            <button onClick={prevMonth} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
-            <h2 className="text-xl font-bold text-slate-800">{MONTHS[currentMonth]} {currentYear}</h2>
-            <button onClick={nextMonth} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-600"><ChevronRight className="w-5 h-5" /></button>
-          </div>
-
-          {/* Days of Week */}
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-white">
-            {DAYS_OF_WEEK.map(day => (
-              <div key={day} className="py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-500 border-r border-slate-100 last:border-r-0">
-                {day.substring(0,3)}
+        {viewMode === 'staff' && (
+          <div className="bg-pink-50 border border-pink-200 p-4 rounded-xl mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-pink-800">
+              <User className="w-6 h-6" />
+              <div>
+                <h3 className="font-bold">Staff View Active</h3>
+                <p className="text-xs font-medium opacity-80">Select your name to claim available shifts.</p>
               </div>
+            </div>
+            <select 
+              className="w-full sm:w-64 p-2.5 border border-pink-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 bg-white font-medium text-slate-700 shadow-sm"
+              value={currentStaffId}
+              onChange={(e) => setCurrentStaffId(e.target.value)}
+            >
+              <option value="">-- Select Your Profile --</option>
+              {staffList.filter(s => s.status !== 'Archived').map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.role ? s.role : 'Unassigned'})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200">
+            <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
+            <h2 className="text-lg font-black text-slate-800 min-w-[140px] text-center">
+              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </h2>
+            <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 mr-4 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
+              <Filter className="w-4 h-4" /> Filter Role:
+            </div>
+            {['All', ...roles.map(r => r.name)].map(role => (
+              <button 
+                key={role}
+                onClick={() => setRoleFilter(role)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all shadow-sm ${roleFilter === role ? 'bg-slate-800 text-white ring-2 ring-slate-800 ring-offset-2' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+            {WEEKDAYS.map(day => (
+              <div key={day} className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">{day}</div>
             ))}
           </div>
 
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 bg-slate-100 gap-px border-b border-slate-200">
-            {Array.from({ length: firstDay }).map((_, i) => (
-              <div key={`empty-${i}`} className="bg-slate-50/50 min-h-[120px] p-2"></div>
+          <div className="grid grid-cols-7">
+            {Array.from({ length: startingBlankDays }).map((_, i) => (
+              <div key={`blank-${i}`} className="min-h-[120px] p-2 border-b border-r border-slate-100 bg-slate-50/50"></div>
             ))}
-            
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const dayNum = i + 1;
-              const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+
+            {Array.from({ length: daysInMonth }).map((_, index) => {
+              const day = index + 1;
+              const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               
-              // Find shifts for this day
               const dayShifts = displayedShifts.filter(s => s.date === dateStr);
-              const isToday = new Date().toISOString().split('T')[0] === dateStr;
 
               return (
-                <div key={dayNum} className={`bg-white min-h-[120px] p-2 flex flex-col group transition-colors ${viewMode === 'lead_nurse' ? 'hover:bg-slate-50' : ''}`}>
+                <div 
+                  key={day} 
+                  className={`min-h-[120px] p-2 border-b border-r border-slate-100 transition-colors group relative ${dayShifts.length > 0 ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
+                >
                   <div className="flex justify-between items-start mb-2">
-                    <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-pink-600 text-white' : 'text-slate-700'}`}>
-                      {dayNum}
-                    </span>
-                    {viewMode === 'lead_nurse' && (
+                    <span className="text-sm font-bold text-slate-400">{day}</span>
+                    {viewMode === 'lead' && (
                       <button 
-                        onClick={() => { setSelectedDateStr(dateStr); setIsAddingShift(true); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-pink-600 transition-all bg-white rounded-md shadow-sm border border-slate-200"
-                        title="Post an available shift"
+                        onClick={() => { setNewShift({...newShift, date: dateStr}); setIsPostModalOpen(true); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 bg-indigo-100 text-indigo-600 rounded hover:bg-indigo-200 transition-all"
+                        title="Post Shift on this date"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
-
-                  {/* Shift Badges */}
-                  <div className="space-y-1.5 flex-1">
+                  
+                  <div className="space-y-1.5">
                     {dayShifts.map(shift => (
                       <div 
                         key={shift.id}
                         onClick={() => setViewShift(shift)}
-                        className={`text-[10px] p-1.5 rounded border cursor-pointer hover:shadow-md transition-all font-bold leading-tight ${getRoleColors(shift.role, shift.status)}`}
+                        className={`p-1.5 rounded text-xs font-bold cursor-pointer transition-transform hover:scale-[1.02] ${shift.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-300 border-dashed animate-pulse' : getRoleColorClass(shift.role)}`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex justify-between items-center truncate">
                           <span>{shift.role}</span>
-                          {shift.status === 'Pending' && <Clock className="w-3 h-3 text-amber-600" />}
+                          {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
                         </div>
-                        <div className="font-medium opacity-90 mt-0.5">{shift.start} - {shift.end}</div>
+                        <div className="font-medium text-[10px] opacity-90 mt-0.5 truncate">
+                          {shift.start} - {shift.end}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -351,88 +328,67 @@ const displayedShifts = availableShifts.filter(s => {
             })}
           </div>
         </div>
+      </div>
 
-        {/* MODAL: Post New Shift (Lead Nurse Only) */}
-        {isAddingShift && (
-          <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl p-6 w-96 border border-slate-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-slate-900">Post Available Shift</h3>
-                <button onClick={() => setIsAddingShift(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-              </div>
-              <p className="text-sm text-slate-500 mb-4 font-medium border-b border-slate-100 pb-3">Date: {new Date(selectedDateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cover Required</label>
-                  <select 
-                    value={newShiftForm.role} 
-                    onChange={e => setNewShiftForm({...newShiftForm, role: e.target.value})}
-                    className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500"
-                  >
-                    <option value="Nurse">Nurse</option>
-                    <option value="HCA">HCA</option>
-                    <option value="ANP">ANP</option>
-                  </select>
+      {/* VIEW SHIFT MODAL */}
+      {viewShift && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[95vw] overflow-hidden">
+            <div className={`p-6 text-white flex justify-between items-start ${viewShift.status === 'Pending' ? 'bg-amber-500' : 'bg-slate-800'}`}>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 bg-white/20 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                    {viewShift.status === 'Pending' ? 'Action Required' : 'Available Shift'}
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start</label>
-                    <input type="time" value={newShiftForm.start} onChange={e => setNewShiftForm({...newShiftForm, start: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Finish</label>
-                    <input type="time" value={newShiftForm.end} onChange={e => setNewShiftForm({...newShiftForm, end: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500" />
-                  </div>
-                </div>
-                <button onClick={handleAddShift} className="w-full mt-2 bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl font-bold transition-all shadow-sm">Post Shift to Board</button>
+                <h3 className="text-2xl font-black">{viewShift.role} Cover</h3>
+                <p className="font-medium opacity-90 text-sm mt-1">
+                  {new Date(viewShift.date).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
               </div>
+              <button onClick={() => setViewShift(null)} className="text-white/70 hover:text-white bg-white/10 p-1.5 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
             </div>
-          </div>
-        )}
-
-        {/* MODAL: View/Action Shift */}
-        {viewShift && (
-          <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl p-6 w-96 border border-slate-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-slate-900">Shift Details</h3>
-                <button onClick={() => setViewShift(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-              </div>
-
-              <div className={`p-4 rounded-xl border mb-6 ${getRoleColors(viewShift.role, viewShift.status)}`}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-black uppercase tracking-widest text-sm">{viewShift.role} Cover</span>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/50">{viewShift.status}</span>
+            
+            <div className="p-6">
+              <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
+                <div className="p-3 bg-white rounded-full shadow-sm">
+                  <Clock className="w-6 h-6 text-slate-400" />
                 </div>
-                <div className="text-lg font-bold">{new Date(viewShift.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-                <div className="font-medium opacity-90">{viewShift.start} - {viewShift.end}</div>
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shift Times</p>
+                  <p className="text-lg font-black text-slate-800">{viewShift.start} - {viewShift.end}</p>
+                </div>
               </div>
+
+              {viewShift.notes && (
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Lead Nurse Notes</p>
+                  <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 italic">"{viewShift.notes}"</p>
+                </div>
+              )}
 
               {/* LEAD NURSE CONTROLS */}
-              {viewMode === 'lead_nurse' && (
+              {viewMode === 'lead' && (
                 <div className="space-y-3">
                   {viewShift.status === 'Pending' ? (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                      <p className="text-sm text-amber-800 font-medium mb-3 flex items-center gap-2">
-                        <User className="w-5 h-5" /> <strong>{getStaffName(viewShift.claimedBy)}</strong> wants this shift.
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-sm text-amber-800 font-medium mb-4 text-center">
+                        <strong>{staffList.find(s => s.id === viewShift.claimedBy)?.name}</strong> has claimed this shift.
                       </p>
-                      <button onClick={() => handleApproveShift(viewShift)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 mb-2">
-                        <CheckCircle className="w-5 h-5" /> Approve & Sync to Rota
-                      </button>
-                      <button onClick={() => handleRevokeClaim(viewShift.id)} className="w-full bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 py-2 rounded-lg font-bold">
-                        Reject / Re-open Shift
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleApproveShift(viewShift.id)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg font-bold transition-colors shadow-sm flex items-center justify-center gap-2"><CheckCircle className="w-4 h-4" /> Approve</button>
+                        <button onClick={() => handleRevokeClaim(viewShift.id)} className="flex-1 bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 py-2 rounded-lg font-bold transition-colors">Reject</button>
+                      </div>
                     </div>
                   ) : (
-                    <button onClick={() => handleDeleteShift(viewShift.id)} className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
-                      <Trash2 className="w-5 h-5" /> Delete Posted Shift
+                    <button onClick={() => handleDeleteShift(viewShift.id)} className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                      <Trash2 className="w-4 h-4" /> Delete Shift Posting
                     </button>
                   )}
                 </div>
               )}
 
-{/* STAFF CONTROLS */}
+              {/* STAFF CONTROLS */}
               {viewMode === 'staff' && (
                 <div className="space-y-3">
                   {viewShift.status === 'Open' ? (
@@ -467,12 +423,93 @@ const displayedShifts = availableShifts.filter(s => {
                   )}
                 </div>
               )}
-
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      {/* POST SHIFT MODAL */}
+      {isPostModalOpen && viewMode === 'lead' && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[95vw] overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="text-lg font-black text-slate-800">Post Open Shift</h3>
+              <button onClick={() => setIsPostModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Date</label>
+                <input 
+                  type="date" 
+                  className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 bg-slate-50 font-medium" 
+                  value={newShift.date}
+                  onChange={e => setNewShift({...newShift, date: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Role Required</label>
+                <select 
+                  className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-medium bg-white"
+                  value={newShift.role}
+                  onChange={e => setNewShift({...newShift, role: e.target.value})}
+                >
+                  {roles.map(r => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))}
+                  {newShift.role && !roles.some(r => r.name === newShift.role) && (
+                    <option value={newShift.role}>{newShift.role} (Legacy)</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Start Time</label>
+                  <input 
+                    type="time" 
+                    className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-medium" 
+                    value={newShift.start}
+                    onChange={e => setNewShift({...newShift, start: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">End Time</label>
+                  <input 
+                    type="time" 
+                    className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-medium" 
+                    value={newShift.end}
+                    onChange={e => setNewShift({...newShift, end: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes (Optional)</label>
+                <textarea 
+                  className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 text-sm" 
+                  rows="2"
+                  placeholder="e.g. Needs to run the flu clinic..."
+                  value={newShift.notes}
+                  onChange={e => setNewShift({...newShift, notes: e.target.value})}
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button onClick={() => setIsPostModalOpen(false)} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg font-bold hover:bg-slate-50 transition-colors">Cancel</button>
+              <button 
+                onClick={handlePostShift} 
+                disabled={!newShift.date || !newShift.start || !newShift.end || !newShift.role}
+                className="flex-1 bg-slate-900 text-white py-2.5 rounded-lg font-bold hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                Post Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
