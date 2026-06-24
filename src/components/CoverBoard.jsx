@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Trash2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc, getDoc } from 'firebase/firestore';
-import { auth, getRotaDocRef, getCoverDocRef } from '../firebase';
+import { auth, getRotaDocRef, getCoverBoardDocRef } from '../firebase';
 
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
@@ -48,11 +48,11 @@ export default function CoverBoard() {
       }
     });
 
-    const unsubCover = onSnapshot(getCoverDocRef(), (docSnap) => {
+    const unsubCover = onSnapshot(getCoverBoardDocRef(), (docSnap) => {
       if (docSnap.exists() && docSnap.data().shifts) {
         setAvailableShifts(docSnap.data().shifts);
       } else {
-        setDoc(getCoverDocRef(), { shifts: [] }, { merge: true });
+        setDoc(getCoverBoardDocRef(), { shifts: [] }, { merge: true });
       }
       if (isMounted) setIsDbLoaded(true);
     });
@@ -77,7 +77,7 @@ export default function CoverBoard() {
     };
 
     const updatedShifts = [...availableShifts, shiftData];
-    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+    updateDoc(getCoverBoardDocRef(), { shifts: updatedShifts });
 
     setIsPostModalOpen(false);
     setNewShift({ date: '', role: roles.length > 0 ? roles[0].name : '', start: '', end: '', notes: '' });
@@ -96,7 +96,7 @@ export default function CoverBoard() {
     const updatedShifts = availableShifts.map(s => 
       s.id === shiftId ? { ...s, status: 'Pending', claimedBy: Number(currentStaffId) } : s
     );
-    updateDoc(getCoverDocRef(), { shifts: updatedShifts }).catch(console.error);
+    updateDoc(getCoverBoardDocRef(), { shifts: updatedShifts }).catch(console.error);
     setViewShift(null);
   };
 
@@ -104,7 +104,7 @@ export default function CoverBoard() {
     const updatedShifts = availableShifts.map(s => 
       s.id === shiftId ? { ...s, status: 'Open', claimedBy: null } : s
     );
-    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+    updateDoc(getCoverBoardDocRef(), { shifts: updatedShifts });
     setViewShift(null);
   };
 
@@ -127,7 +127,7 @@ export default function CoverBoard() {
       const updatedShifts = availableShifts.map(s => 
         s.id === shiftId ? { ...s, status: 'Approved' } : s
       );
-      await updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+      await updateDoc(getCoverBoardDocRef(), { shifts: updatedShifts });
 
       const rotaSnap = await getDoc(getRotaDocRef());
       if (rotaSnap.exists()) {
@@ -166,7 +166,7 @@ export default function CoverBoard() {
 
   const handleDeleteShift = (shiftId) => {
     const updatedShifts = availableShifts.filter(s => s.id !== shiftId);
-    updateDoc(getCoverDocRef(), { shifts: updatedShifts });
+    updateDoc(getCoverBoardDocRef(), { shifts: updatedShifts });
     setViewShift(null);
   };
 
