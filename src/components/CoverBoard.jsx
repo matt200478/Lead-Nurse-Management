@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Trash2 } from 'lucide-react';
+import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Trash2, List } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getCoverBoardDocRef } from '../firebase';
@@ -18,6 +18,7 @@ export default function CoverBoard() {
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('lead'); 
+  const [displayStyle, setDisplayStyle] = useState('calendar'); // 'calendar' or 'list'
   const [currentStaffId, setCurrentStaffId] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
 
@@ -185,10 +186,21 @@ export default function CoverBoard() {
   const firstDay = getFirstDayOfMonth(currentDate.getFullYear(), currentDate.getMonth());
   const startingBlankDays = firstDay === 0 ? 6 : firstDay - 1;
 
+  const today = new Date();
+  const isToday = (day, currentMonth, currentYear) => {
+    return day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
+  };
+
   const displayedShifts = availableShifts.filter(s => {
     if (roleFilter !== 'All' && s.role !== roleFilter) return false;
     if (s.status === 'Approved') return false; 
     return true;
+  });
+
+  const sortedListShifts = [...displayedShifts].sort((a, b) => {
+    const dateDiff = new Date(a.date) - new Date(b.date);
+    if (dateDiff !== 0) return dateDiff;
+    return a.start.localeCompare(b.start);
   });
 
   return (
@@ -203,19 +215,38 @@ export default function CoverBoard() {
             <p className="text-sm text-slate-500 font-medium mt-1">Post open shifts and allow staff to proactively claim extra hours.</p>
           </div>
           
-          <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-            <button 
-              onClick={() => setViewMode('lead')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'lead' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-            >
-              <ShieldCheck className="w-4 h-4" /> Lead Nurse
-            </button>
-            <button 
-              onClick={() => setViewMode('staff')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'staff' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-            >
-              <User className="w-4 h-4" /> Staff Member
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+              <button 
+                onClick={() => setViewMode('lead')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'lead' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+              >
+                <ShieldCheck className="w-4 h-4" /> Lead Nurse
+              </button>
+              <button 
+                onClick={() => setViewMode('staff')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'staff' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+              >
+                <User className="w-4 h-4" /> Staff Member
+              </button>
+            </div>
+            
+            <div className="hidden md:block h-8 w-px bg-slate-300 mx-1"></div>
+
+            <div className="flex items-center gap-1 bg-slate-200 p-1 rounded-xl shadow-inner border border-slate-300">
+              <button 
+                onClick={() => setDisplayStyle('calendar')} 
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${displayStyle === 'calendar' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <CalendarDays className="w-4 h-4" /> <span className="hidden sm:inline">Calendar</span>
+              </button>
+              <button 
+                onClick={() => setDisplayStyle('list')} 
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${displayStyle === 'list' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <List className="w-4 h-4" /> <span className="hidden sm:inline">List Shifts</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -242,13 +273,19 @@ export default function CoverBoard() {
         )}
 
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-          <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200">
-            <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
-            <h2 className="text-lg font-black text-slate-800 min-w-[140px] text-center">
-              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-            </h2>
-            <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
-          </div>
+          {displayStyle === 'calendar' ? (
+            <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200">
+              <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
+              <h2 className="text-lg font-black text-slate-800 min-w-[140px] text-center">
+                {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </h2>
+              <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-lg font-black text-slate-800">All Available Shifts</h2>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 mr-4 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
@@ -266,78 +303,109 @@ export default function CoverBoard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-            {WEEKDAYS.map(day => (
-              <div key={day} className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">{day}</div>
-            ))}
-          </div>
+        {displayStyle === 'calendar' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+              {WEEKDAYS.map(day => (
+                <div key={day} className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">{day}</div>
+              ))}
+            </div>
 
-          <div className="grid grid-cols-7">
-            {Array.from({ length: startingBlankDays }).map((_, i) => (
-              <div key={`blank-${i}`} className="min-h-[120px] p-2 border-b border-r border-slate-100 bg-slate-50/50"></div>
-            ))}
+            <div className="grid grid-cols-7">
+              {Array.from({ length: startingBlankDays }).map((_, i) => (
+                <div key={`blank-${i}`} className="min-h-[120px] p-2 border-b border-r border-slate-100 bg-slate-50/50"></div>
+              ))}
 
-            {Array.from({ length: daysInMonth }).map((_, index) => {
-              const day = index + 1;
-              const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              
-              const dayShifts = displayedShifts.filter(s => s.date === dateStr);
+              {Array.from({ length: daysInMonth }).map((_, index) => {
+                const day = index + 1;
+                const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const dayShifts = displayedShifts.filter(s => s.date === dateStr);
+                const isCurrentDay = isToday(day, currentDate.getMonth(), currentDate.getFullYear());
 
-              return (
-                <div 
-                  key={day} 
-                  className={`min-h-[120px] p-2 border-b border-r border-slate-100 transition-colors group relative ${dayShifts.length > 0 ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-sm font-bold text-slate-400">{day}</span>
-                    {viewMode === 'lead' && (
-                      <button 
-                        onClick={() => { setNewShift({...newShift, date: dateStr}); setIsPostModalOpen(true); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 bg-indigo-100 text-indigo-600 rounded hover:bg-indigo-200 transition-all"
-                        title="Post Shift on this date"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-1.5">
-                    {dayShifts.map(shift => (
-                      <div 
-                        key={shift.id}
-                        onClick={() => setViewShift(shift)}
-                        className={`p-1.5 rounded text-xs font-bold cursor-pointer transition-transform hover:scale-[1.02] ${shift.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-300 border-dashed animate-pulse' : getRoleColorClass(shift.role)}`}
-                      >
-                        <div className="flex justify-between items-center truncate">
-                          <span>{shift.role}</span>
-                          <div className="flex items-center gap-1">
-                            {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
-                            {viewMode === 'lead' && (
-                              <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  if(window.confirm('Are you sure you want to delete this shift?')) handleDeleteShift(shift.id); 
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-black/20 rounded transition-all text-white"
-                                title="Quick Delete Shift"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
+                return (
+                  <div 
+                    key={day} 
+                    className={`min-h-[120px] p-2 border-b border-r border-slate-100 transition-colors group relative ${dayShifts.length > 0 ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`text-sm font-bold flex items-center justify-center w-7 h-7 rounded-full ${isCurrentDay ? 'bg-pink-600 text-white shadow-md' : 'text-slate-400'}`}>
+                        {day}
+                      </span>
+                      {viewMode === 'lead' && (
+                        <button 
+                          onClick={() => { setNewShift({...newShift, date: dateStr}); setIsPostModalOpen(true); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 bg-indigo-100 text-indigo-600 rounded hover:bg-indigo-200 transition-all"
+                          title="Post Shift on this date"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      {dayShifts.map(shift => (
+                        <div 
+                          key={shift.id}
+                          onClick={() => setViewShift(shift)}
+                          className={`p-1.5 rounded text-xs font-bold cursor-pointer transition-transform hover:scale-[1.02] ${shift.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-300 border-dashed animate-pulse' : getRoleColorClass(shift.role)}`}
+                        >
+                          <div className="flex justify-between items-center truncate">
+                            <span>{shift.role}</span>
+                            <div className="flex items-center gap-1">
+                              {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
+                              {viewMode === 'lead' && (
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if(window.confirm('Are you sure you want to delete this shift?')) handleDeleteShift(shift.id); 
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-black/20 rounded transition-all text-white"
+                                  title="Quick Delete Shift"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="font-medium text-[10px] opacity-90 mt-0.5 truncate">
+                            {shift.start} - {shift.end}
                           </div>
                         </div>
-                        <div className="font-medium text-[10px] opacity-90 mt-0.5 truncate">
-                          {shift.start} - {shift.end}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-2">
+             <div className="space-y-3 p-4 max-h-[70vh] overflow-y-auto">
+               {sortedListShifts.length > 0 ? sortedListShifts.map(shift => (
+                  <div key={shift.id} onClick={() => setViewShift(shift)} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-pink-300 hover:bg-pink-50/30 cursor-pointer transition-all gap-4 shadow-sm">
+                     <div className="flex items-center gap-4">
+                        <div className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider ${getRoleColorClass(shift.role)}`}>{shift.role}</div>
+                        <div>
+                           <div className="font-black text-slate-800 text-base">{new Date(shift.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                           <div className="text-sm text-slate-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-4 h-4"/> {shift.start} - {shift.end}</div>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+                        {shift.status === 'Pending' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><Clock className="w-4 h-4"/> Pending</span>}
+                        {shift.status === 'Open' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><CheckCircle className="w-4 h-4"/> Open</span>}
+                     </div>
+                  </div>
+               )) : (
+                  <div className="text-center p-12 text-slate-500 flex flex-col items-center">
+                    <CalendarDays className="w-12 h-12 text-slate-300 mb-4" />
+                    <p className="text-lg font-bold text-slate-700">No Shifts Found</p>
+                    <p className="text-sm mt-1">There are currently no shifts matching your selected role filters.</p>
+                  </div>
+               )}
+             </div>
+          </div>
+        )}
       </div>
 
       {/* VIEW SHIFT MODAL */}
