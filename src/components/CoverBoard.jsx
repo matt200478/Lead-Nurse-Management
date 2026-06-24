@@ -20,7 +20,10 @@ export default function CoverBoard() {
   const [viewMode, setViewMode] = useState('lead'); 
   const [displayStyle, setDisplayStyle] = useState('calendar'); // 'calendar' or 'list'
   const [currentStaffId, setCurrentStaffId] = useState('');
+  
+  // Filtering States
   const [roleFilter, setRoleFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'Open', 'Pending', 'Approved'
 
   const [viewShift, setViewShift] = useState(null);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
@@ -191,9 +194,10 @@ export default function CoverBoard() {
     return day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
   };
 
+  // Filter shifts based on both Role and Status
   const displayedShifts = availableShifts.filter(s => {
     if (roleFilter !== 'All' && s.role !== roleFilter) return false;
-    if (s.status === 'Approved') return false; 
+    if (statusFilter !== 'All' && s.status !== statusFilter) return false;
     return true;
   });
 
@@ -272,9 +276,9 @@ export default function CoverBoard() {
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           {displayStyle === 'calendar' ? (
-            <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200 shrink-0">
               <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
               <h2 className="text-lg font-black text-slate-800 min-w-[140px] text-center">
                 {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
@@ -282,24 +286,43 @@ export default function CoverBoard() {
               <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
             </div>
           ) : (
-            <div>
-              <h2 className="text-lg font-black text-slate-800">All Available Shifts</h2>
+            <div className="shrink-0">
+              <h2 className="text-lg font-black text-slate-800">All Shift Postings</h2>
             </div>
           )}
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-2 mr-4 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
-              <Filter className="w-4 h-4" /> Filter Role:
+          <div className="flex flex-col gap-2 w-full md:w-auto items-start md:items-end">
+            {/* Role Filter Row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 mr-2 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
+                <Filter className="w-4 h-4" /> Role:
+              </div>
+              {['All', ...roles.map(r => r.name)].map(role => (
+                <button 
+                  key={role}
+                  onClick={() => setRoleFilter(role)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all shadow-sm ${roleFilter === role ? 'bg-slate-800 text-white ring-2 ring-slate-800 ring-offset-1' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {role}
+                </button>
+              ))}
             </div>
-            {['All', ...roles.map(r => r.name)].map(role => (
-              <button 
-                key={role}
-                onClick={() => setRoleFilter(role)}
-                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all shadow-sm ${roleFilter === role ? 'bg-slate-800 text-white ring-2 ring-slate-800 ring-offset-2' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
-              >
-                {role}
-              </button>
-            ))}
+
+            {/* Status Filter Row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 mr-2 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
+                <Filter className="w-4 h-4" /> Status:
+              </div>
+              {['All', 'Open', 'Pending', 'Approved'].map(status => (
+                <button 
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all shadow-sm ${statusFilter === status ? 'bg-slate-800 text-white ring-2 ring-slate-800 ring-offset-1' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {status === 'Approved' ? 'Covered' : status}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -348,19 +371,20 @@ export default function CoverBoard() {
                         <div 
                           key={shift.id}
                           onClick={() => setViewShift(shift)}
-                          className={`p-1.5 rounded text-xs font-bold cursor-pointer transition-transform hover:scale-[1.02] ${shift.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-300 border-dashed animate-pulse' : getRoleColorClass(shift.role)}`}
+                          className={`p-1.5 rounded text-xs font-bold cursor-pointer transition-transform hover:scale-[1.02] ${shift.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-300 border-dashed animate-pulse' : shift.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-inner' : getRoleColorClass(shift.role)}`}
                         >
                           <div className="flex justify-between items-center truncate">
                             <span>{shift.role}</span>
                             <div className="flex items-center gap-1">
                               {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
+                              {shift.status === 'Approved' && <CheckCircle className="w-3 h-3 shrink-0 text-emerald-600" />}
                               {viewMode === 'lead' && (
                                 <button 
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
                                     if(window.confirm('Are you sure you want to delete this shift?')) handleDeleteShift(shift.id); 
                                   }}
-                                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-black/20 rounded transition-all text-white"
+                                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${shift.status === 'Approved' ? 'hover:bg-emerald-200 text-emerald-700' : 'hover:bg-black/20 text-white'}`}
                                   title="Quick Delete Shift"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -385,7 +409,7 @@ export default function CoverBoard() {
                {sortedListShifts.length > 0 ? sortedListShifts.map(shift => (
                   <div key={shift.id} onClick={() => setViewShift(shift)} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-pink-300 hover:bg-pink-50/30 cursor-pointer transition-all gap-4 shadow-sm">
                      <div className="flex items-center gap-4">
-                        <div className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider ${getRoleColorClass(shift.role)}`}>{shift.role}</div>
+                        <div className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider ${shift.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : getRoleColorClass(shift.role)}`}>{shift.role}</div>
                         <div>
                            <div className="font-black text-slate-800 text-base">{new Date(shift.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
                            <div className="text-sm text-slate-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-4 h-4"/> {shift.start} - {shift.end}</div>
@@ -393,14 +417,15 @@ export default function CoverBoard() {
                      </div>
                      <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
                         {shift.status === 'Pending' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><Clock className="w-4 h-4"/> Pending</span>}
-                        {shift.status === 'Open' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><CheckCircle className="w-4 h-4"/> Open</span>}
+                        {shift.status === 'Open' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><CheckCircle className="w-4 h-4"/> Open</span>}
+                        {shift.status === 'Approved' && <span className="flex items-center justify-center gap-1 text-sm font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg w-full sm:w-auto"><CheckCircle className="w-4 h-4"/> Covered</span>}
                      </div>
                   </div>
                )) : (
                   <div className="text-center p-12 text-slate-500 flex flex-col items-center">
                     <CalendarDays className="w-12 h-12 text-slate-300 mb-4" />
                     <p className="text-lg font-bold text-slate-700">No Shifts Found</p>
-                    <p className="text-sm mt-1">There are currently no shifts matching your selected role filters.</p>
+                    <p className="text-sm mt-1">There are currently no shifts matching your selected filters.</p>
                   </div>
                )}
              </div>
@@ -412,11 +437,11 @@ export default function CoverBoard() {
       {viewShift && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[95vw] overflow-hidden">
-            <div className={`p-6 text-white flex justify-between items-start ${viewShift.status === 'Pending' ? 'bg-amber-500' : 'bg-slate-800'}`}>
+            <div className={`p-6 text-white flex justify-between items-start ${viewShift.status === 'Pending' ? 'bg-amber-500' : viewShift.status === 'Approved' ? 'bg-emerald-600' : 'bg-slate-800'}`}>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="px-2 py-0.5 bg-white/20 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                    {viewShift.status === 'Pending' ? 'Action Required' : 'Available Shift'}
+                    {viewShift.status === 'Pending' ? 'Action Required' : viewShift.status === 'Approved' ? 'Covered Shift' : 'Available Shift'}
                   </span>
                 </div>
                 <h3 className="text-2xl font-black">{viewShift.role} Cover</h3>
@@ -459,7 +484,16 @@ export default function CoverBoard() {
                       </div>
                     </div>
                   )}
-                  <button onClick={() => { if(window.confirm('Are you sure you want to completely delete this shift?')) handleDeleteShift(viewShift.id); }} className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+
+                  {viewShift.status === 'Approved' && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                      <p className="text-sm text-emerald-800 font-medium text-center">
+                        <strong>{staffList.find(s => s.id === viewShift.claimedBy)?.name || 'A team member'}</strong> is covering this shift.
+                      </p>
+                    </div>
+                  )}
+
+                  <button onClick={() => { if(window.confirm('Are you sure you want to completely delete this shift?')) handleDeleteShift(viewShift.id); }} className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 mt-4">
                     <Trash2 className="w-4 h-4" /> Delete Shift Posting
                   </button>
                 </div>
@@ -468,7 +502,7 @@ export default function CoverBoard() {
               {/* STAFF CONTROLS */}
               {viewMode === 'staff' && (
                 <div className="space-y-3">
-                  {viewShift.status === 'Open' ? (
+                  {viewShift.status === 'Open' && (
                     <>
                       <button 
                         onClick={() => handleClaimShift(viewShift.id)}
@@ -486,7 +520,9 @@ export default function CoverBoard() {
                         <p className="text-xs text-red-500 text-center font-semibold">You cannot claim this. Only {viewShift.role}s can cover this shift.</p>
                       )}
                     </>
-                  ) : (
+                  )}
+
+                  {viewShift.status === 'Pending' && (
                     viewShift.claimedBy === Number(currentStaffId) ? (
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
                         <Clock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
@@ -496,6 +532,17 @@ export default function CoverBoard() {
                       </div>
                     ) : (
                       <p className="text-center text-sm font-bold text-slate-500 p-3 bg-slate-50 rounded-xl">Shift has been claimed by another team member.</p>
+                    )
+                  )}
+
+                  {viewShift.status === 'Approved' && (
+                    viewShift.claimedBy === Number(currentStaffId) ? (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-emerald-800">You are covering this shift.</p>
+                      </div>
+                    ) : (
+                      <p className="text-center text-sm font-bold text-slate-500 p-3 bg-slate-50 rounded-xl">Shift has been covered by another team member.</p>
                     )
                   )}
                 </div>
