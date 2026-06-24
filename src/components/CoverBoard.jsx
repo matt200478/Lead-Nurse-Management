@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X } from 'lucide-react';
+import { CalendarDays, User, Plus, Clock, CheckCircle, ShieldCheck, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Trash2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getCoverDocRef } from '../firebase';
@@ -89,7 +89,6 @@ export default function CoverBoard() {
     const shiftToClaim = availableShifts.find(s => s.id === shiftId);
     const staff = staffList.find(s => s.id === Number(currentStaffId));
     
-    // Prevent claiming if the roles do not match
     if (staff && shiftToClaim && staff.role !== shiftToClaim.role) {
         return alert(`Role mismatch: As a ${staff.role}, you cannot claim a ${shiftToClaim.role} shift.`);
     }
@@ -109,7 +108,6 @@ export default function CoverBoard() {
     setViewShift(null);
   };
 
-  // Helper function to calculate the ISO Week Key (YYYY-Www) for auto-syncing
   const getWeekKey = (dateStr) => {
       const date = new Date(dateStr);
       const day = date.getDay() || 7; 
@@ -126,13 +124,11 @@ export default function CoverBoard() {
     if (!shiftToApprove || !shiftToApprove.claimedBy) return;
 
     try {
-      // 1. Mark as Approved on Cover Board
       const updatedShifts = availableShifts.map(s => 
         s.id === shiftId ? { ...s, status: 'Approved' } : s
       );
       await updateDoc(getCoverDocRef(), { shifts: updatedShifts });
 
-      // 2. Automatically sync to the Clinic Rota
       const rotaSnap = await getDoc(getRotaDocRef());
       if (rotaSnap.exists()) {
           const rotaData = rotaSnap.data();
@@ -315,7 +311,21 @@ export default function CoverBoard() {
                       >
                         <div className="flex justify-between items-center truncate">
                           <span>{shift.role}</span>
-                          {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
+                          <div className="flex items-center gap-1">
+                            {shift.status === 'Pending' && <Clock className="w-3 h-3 shrink-0" />}
+                            {viewMode === 'lead' && (
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  if(window.confirm('Are you sure you want to delete this shift?')) handleDeleteShift(shift.id); 
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-black/20 rounded transition-all text-white"
+                                title="Quick Delete Shift"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="font-medium text-[10px] opacity-90 mt-0.5 truncate">
                           {shift.start} - {shift.end}
@@ -370,7 +380,7 @@ export default function CoverBoard() {
               {/* LEAD NURSE CONTROLS */}
               {viewMode === 'lead' && (
                 <div className="space-y-3">
-                  {viewShift.status === 'Pending' ? (
+                  {viewShift.status === 'Pending' && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                       <p className="text-sm text-amber-800 font-medium mb-4 text-center">
                         <strong>{staffList.find(s => s.id === viewShift.claimedBy)?.name}</strong> has claimed this shift.
@@ -380,11 +390,10 @@ export default function CoverBoard() {
                         <button onClick={() => handleRevokeClaim(viewShift.id)} className="flex-1 bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 py-2 rounded-lg font-bold transition-colors">Reject</button>
                       </div>
                     </div>
-                  ) : (
-                    <button onClick={() => handleDeleteShift(viewShift.id)} className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
-                      <Trash2 className="w-4 h-4" /> Delete Shift Posting
-                    </button>
                   )}
+                  <button onClick={() => { if(window.confirm('Are you sure you want to completely delete this shift?')) handleDeleteShift(viewShift.id); }} className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                    <Trash2 className="w-4 h-4" /> Delete Shift Posting
+                  </button>
                 </div>
               )}
 
