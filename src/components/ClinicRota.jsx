@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Plus, Trash2, User, Settings, X, ChevronLeft, ChevronRight, Calendar, Printer, CalendarDays, Layout, Loader2, Star, Activity } from 'lucide-react';
+import { CheckCircle, AlertCircle, Plus, Trash2, User, Settings, X, ChevronLeft, ChevronRight, Calendar, Printer, CalendarDays, Layout, Loader2, Star, Activity, Edit2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
