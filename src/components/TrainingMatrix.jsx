@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2, Calendar } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getTrainingDocRef } from '../firebase';
@@ -11,7 +11,7 @@ export default function TrainingMatrix() {
 
     const [courses, setCourses] = useState(INITIAL_TRAINING_COURSES);
     const [staffList, setStaffList] = useState([]); 
-    const [roles, setRoles] = useState([]); // Dynamic roles state
+    const [roles, setRoles] = useState([]); 
 
     const [filter, setFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -55,7 +55,6 @@ export default function TrainingMatrix() {
                     if (data.staffList) setStaffList(data.staffList);
                     if (data.roles) {
                         setRoles(data.roles);
-                        // Initialize newCourseRoles default if it's empty
                         if (newCourseRoles.length === 0) {
                             setNewCourseRoles(data.roles.map(r => r.name));
                         }
@@ -86,14 +85,12 @@ export default function TrainingMatrix() {
     };
 
     const calculateCellStatus = (record, course, staffRole) => {
-        // Fallback to all active dynamic roles if the course doesn't have an array
         const courseRoles = course.roles || roles.map(r => r.name);
         if (!courseRoles.includes(staffRole)) return { status: 'N/A', auto: true };
 
-        if (!record) return { status: 'Expired/Missing' };
+        if (!record) return { status: 'Missing' };
         if (record.override === 'N/A') return { status: 'N/A', auto: false };
 
-        // Handle array migration for calculations
         let history = record.history ? [...record.history] : [];
         if (record.date && !history.includes(record.date)) {
             history.push(record.date);
@@ -103,13 +100,12 @@ export default function TrainingMatrix() {
         let completedDateStr = history.length > 0 ? history[0] : null;
         let bookedDateStr = record.bookedDate;
         
-        // Handle backwards compatibility for shifts saved as 'Booked' before previous update
         if (record.override === 'Booked' && !record.bookedDate) {
             bookedDateStr = record.date;
             completedDateStr = null; 
         }
 
-        if (!completedDateStr && !bookedDateStr && record.override !== 'N/A') return { status: 'Expired/Missing' };
+        if (!completedDateStr && !bookedDateStr && record.override !== 'N/A') return { status: 'Missing' };
 
         let expiryDate = null;
         let diffDays = -1;
@@ -119,33 +115,31 @@ export default function TrainingMatrix() {
             expiryDate = new Date(compDate);
             expiryDate.setMonth(expiryDate.getMonth() + course.freq);
             const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize today
             diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
         }
 
         let status = 'Valid';
         if (!completedDateStr) {
-            status = 'Expired/Missing';
+            status = bookedDateStr ? 'In Progress' : 'Missing';
         } else if (diffDays < 0 && course.freq) {
-            status = 'Expired/Missing';
+            status = 'Expired';
         } else if (diffDays <= 30 && course.freq) {
             status = 'Expiring Soon';
-        }
-
-        if (bookedDateStr) {
-            return { 
-                status: 'Booked', 
-                baseStatus: status, 
-                date: completedDateStr, 
-                bookedDate: bookedDateStr,
-                expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : (course.freq ? null : 'Never')
-            };
         }
 
         return { 
             status, 
             date: completedDateStr, 
-            expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : 'Never' 
+            bookedDate: bookedDateStr,
+            expiry: expiryDate ? expiryDate.toISOString().split('T')[0] : (course.freq ? null : 'Never')
         };
+    };
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '';
+        const [year, month, day] = dateStr.split('-');
+        return `${day}/${month}/${year}`;
     };
 
     const handleSort = (key) => {
@@ -163,9 +157,9 @@ export default function TrainingMatrix() {
                     const records = staff.records || {};
                     const detail = calculateCellStatus(records[c.name], c, staff.role);
                     if (detail.status === 'N/A') return '"N/A"';
-                    if (detail.status === 'Booked') return `"Booked: ${detail.bookedDate}"`;
-                    if (!detail.date) return '""';
-                    return `"${detail.date}"`;
+                    if (detail.status === 'In Progress') return `"In Progress: ${formatDate(detail.bookedDate)}"`;
+                    if (!detail.date) return '"Missing"';
+                    return `"${formatDate(detail.date)} (Exp: ${detail.expiry === 'Never' ? 'Never' : formatDate(detail.expiry)})"`;
                 }),
                 `"${staff.remarks || ''}"`
             ].join(',');
@@ -187,13 +181,12 @@ export default function TrainingMatrix() {
              defaultForm = { history: [], bookedDate: defaultForm.date || '', override: 'Completed' };
         }
         
-        // Auto-migrate legacy 'date' to the 'history' array
         if (defaultForm.date) {
             const currentHistory = defaultForm.history || [];
             if (!currentHistory.includes(defaultForm.date)) {
                 defaultForm.history = [...currentHistory, defaultForm.date];
             }
-            delete defaultForm.date; // Clean up old structure
+            delete defaultForm.date;
         }
         
         if (!defaultForm.history) defaultForm.history = [];
@@ -267,14 +260,13 @@ export default function TrainingMatrix() {
           roles: newCourseRoles
       }]);
       setNewCourseName('');
-      setNewCourseRoles(roles.map(r => r.name)); // Reset to all dynamic roles
+      setNewCourseRoles(roles.map(r => r.name)); 
     };
 
     const handleStartEditCourse = (course) => {
       setEditingCourseName(course.name);
       setEditFormName(course.name);
       setEditFormFreq(course.freq === null ? 'Never' : course.freq.toString());
-      // Fallback for legacy courses
       setEditFormRoles(course.roles || roles.map(r => r.name));
     };
 
@@ -326,20 +318,22 @@ export default function TrainingMatrix() {
 
     const getStatusStyle = (status) => {
         switch(status) {
-            case 'Valid': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-            case 'Expiring Soon': return 'bg-amber-100 text-amber-800 border-amber-200';
-            case 'Expired/Missing': return 'bg-rose-100 text-rose-800 border-rose-200';
-            case 'Booked': return 'bg-blue-100 text-blue-800 border-blue-200';
-            default: return 'bg-slate-100 text-slate-600 border-slate-200';
+            case 'Valid': return 'bg-emerald-100 text-emerald-700';
+            case 'Expiring Soon': return 'bg-orange-100 text-orange-700';
+            case 'Expired': return 'bg-rose-100 text-rose-700';
+            case 'Missing': return 'bg-rose-100 text-rose-700';
+            case 'In Progress': return 'bg-blue-100 text-blue-700';
+            default: return 'bg-slate-100 text-slate-600';
         }
     };
 
     const getStatusIcon = (status) => {
         switch(status) {
-            case 'Valid': return <CheckCircle className="w-3.5 h-3.5 mr-1 shrink-0" />;
-            case 'Expiring Soon': return <AlertTriangle className="w-3.5 h-3.5 mr-1 shrink-0" />;
-            case 'Expired/Missing': return <XCircle className="w-3.5 h-3.5 mr-1 shrink-0" />;
-            case 'Booked': return <Clock className="w-3.5 h-3.5 mr-1 shrink-0" />;
+            case 'Valid': return <CheckCircle className="w-3.5 h-3.5" />;
+            case 'Expiring Soon': return <AlertTriangle className="w-3.5 h-3.5" />;
+            case 'Expired': return <XCircle className="w-3.5 h-3.5" />;
+            case 'Missing': return <AlertCircle className="w-3.5 h-3.5" />;
+            case 'In Progress': return <Clock className="w-3.5 h-3.5" />;
             default: return null;
         }
     };
@@ -382,15 +376,15 @@ export default function TrainingMatrix() {
                 totalApplicable++;
                 if (detail.status === 'Valid') totalValid++;
                 else if (detail.status === 'Expiring Soon') totalExpiring++;
-                else if (detail.status === 'Expired/Missing') totalMissing++;
+                else if (detail.status === 'Expired' || detail.status === 'Missing') totalMissing++;
             }
         });
     });
     const complianceRate = totalApplicable > 0 ? Math.round((totalValid / totalApplicable) * 100) : 100;
 
     return (
-        <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 print:bg-white print:p-0">
-            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 shadow-sm print:hidden">
+        <div className="flex-1 bg-white min-h-full font-sans text-slate-800 print:bg-white print:p-0">
+            <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-4 shadow-sm print:hidden">
                 <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 max-w-7xl mx-auto">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
@@ -431,7 +425,7 @@ export default function TrainingMatrix() {
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Compliance Rate</p>
                             <p className="text-3xl font-black text-slate-800">{complianceRate}%</p>
                         </div>
-                        <div className={`p-3 rounded-full ${complianceRate >= 90 ? 'bg-emerald-100 text-emerald-600' : complianceRate >= 75 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
+                        <div className={`p-3 rounded-full ${complianceRate >= 90 ? 'bg-emerald-100 text-emerald-600' : complianceRate >= 75 ? 'bg-orange-100 text-orange-600' : 'bg-rose-100 text-rose-600'}`}>
                             <Activity className="w-6 h-6" />
                         </div>
                     </div>
@@ -445,9 +439,9 @@ export default function TrainingMatrix() {
                     <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                         <div>
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Expiring Soon (30d)</p>
-                            <p className="text-3xl font-black text-amber-600">{totalExpiring}</p>
+                            <p className="text-3xl font-black text-orange-600">{totalExpiring}</p>
                         </div>
-                        <div className="p-3 rounded-full bg-amber-100 text-amber-600"><AlertTriangle className="w-6 h-6" /></div>
+                        <div className="p-3 rounded-full bg-orange-100 text-orange-600"><AlertTriangle className="w-6 h-6" /></div>
                     </div>
                     <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                         <div>
@@ -478,12 +472,12 @@ export default function TrainingMatrix() {
                     </button>
                 </div>
 
-                <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-x-auto print:border-none print:shadow-none">
+                <div className="bg-white overflow-x-auto print:overflow-visible">
                     <table className="w-full text-left border-collapse text-sm">
                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 print:bg-white">
+                            <tr className="border-b border-slate-200 bg-white">
                                 <th 
-                                    className="p-3 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100 sticky left-0 z-10 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:bg-white min-w-[150px]"
+                                    className="p-4 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-50 sticky left-0 z-10 bg-white border-r border-slate-100 min-w-[200px]"
                                     onClick={() => handleSort('name')}
                                 >
                                     Staff Member
@@ -491,13 +485,13 @@ export default function TrainingMatrix() {
                                 {courses.map(course => (
                                     <th 
                                         key={course.name} 
-                                        className="p-3 font-bold text-slate-700 cursor-pointer hover:bg-slate-100 border-l border-slate-200 whitespace-nowrap align-bottom group"
+                                        className="p-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-50 border-r border-slate-100 align-bottom min-w-[150px]"
                                         onClick={() => handleSort(course.name)}
                                     >
-                                        <div className="w-[110px] text-xs leading-tight mb-1 opacity-70">
-                                            {course.freq ? `Every ${course.freq}m` : 'Once'}
+                                        <div className="whitespace-normal leading-tight text-base mb-1">{course.name}</div>
+                                        <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                                            {course.freq ? `EVERY ${course.freq} MONTHS` : 'ONCE'}
                                         </div>
-                                        <div className="whitespace-normal leading-tight">{course.name}</div>
                                     </th>
                                 ))}
                             </tr>
@@ -506,15 +500,17 @@ export default function TrainingMatrix() {
                             {filteredData.map((staff, idx) => {
                                 const records = staff.records || {};
                                 return (
-                                <tr key={idx} className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors print:border-slate-300 ${staff.status === 'Archived' ? 'opacity-50 grayscale' : ''}`}>
-                                    <td className="p-3 sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none border-r border-slate-100 align-top">
-                                        <div className="font-bold text-slate-900 flex items-center gap-2">
+                                <tr key={idx} className={`border-b border-slate-100 transition-colors print:border-slate-300 ${staff.status === 'Archived' ? 'opacity-50 grayscale' : ''}`}>
+                                    <td className="p-4 sticky left-0 z-10 bg-white border-r border-slate-100 align-top">
+                                        <div className="font-bold text-indigo-700 text-base flex items-center gap-2">
                                           {staff.name} 
                                           {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Archived</span>}
                                         </div>
-                                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-0.5">{staff.role}</div>
+                                        <div className="bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase font-bold text-[10px] px-2 py-0.5 rounded inline-block mt-1 tracking-wider">
+                                            {staff.role}
+                                        </div>
                                         {staff.remarks && (
-                                            <div className="text-[10px] text-slate-400 mt-1 italic leading-tight w-full whitespace-normal print:hidden">"{staff.remarks}"</div>
+                                            <div className="text-[10px] text-slate-400 mt-2 italic leading-tight w-full whitespace-normal print:hidden">"{staff.remarks}"</div>
                                         )}
                                     </td>
                                     {courses.map(course => {
@@ -525,27 +521,45 @@ export default function TrainingMatrix() {
                                               <td 
                                                 key={course.name} 
                                                 onClick={detail.auto ? undefined : () => handleCellOpen(staff.id, course.name, records)} 
-                                                className={`p-3 border-l border-slate-100 text-center ${detail.auto ? 'bg-slate-100/40 print:bg-white' : 'bg-slate-50/30 print:bg-white cursor-pointer hover:bg-slate-100 group'}`}
+                                                className={`p-4 border-r border-slate-100 text-center align-middle ${detail.auto ? 'bg-slate-50/50 print:bg-white' : 'print:bg-white cursor-pointer hover:bg-slate-50'}`}
                                                 title={detail.auto ? 'Not required for this role' : ''}
                                               >
-                                                <span className={`font-medium text-xs ${detail.auto ? 'text-slate-300' : 'text-slate-400 group-hover:text-indigo-500'}`}>N/A</span>
+                                                <span className="font-bold text-lg text-slate-200">N/A</span>
                                               </td>
                                             );
                                         }
+
                                         return (
                                             <td 
                                               key={course.name} 
                                               onClick={() => handleCellOpen(staff.id, course.name, records)}
-                                              className="p-2 border-l border-slate-100 align-top min-w-[120px] cursor-pointer hover:bg-slate-50 transition-colors"
+                                              className="p-4 border-r border-slate-100 align-top cursor-pointer hover:bg-slate-50/50 transition-colors group"
                                             >
-                                                <div className={`p-2 rounded-lg border ${getStatusStyle(detail.status)} flex flex-col justify-center h-full print:border-slate-400 print:text-black print:bg-white transition-transform hover:scale-[1.02]`}>
-                                                    <div className="font-bold text-[11px] uppercase tracking-wider flex items-center truncate">
-                                                        {getStatusIcon(detail.status)}
-                                                        <span className="truncate">{detail.status}</span>
+                                                <div className="flex flex-col gap-1.5">
+                                                    {/* Dates Section */}
+                                                    {detail.date && (
+                                                        <div className="leading-tight mb-0.5">
+                                                            <div className="font-bold text-slate-800 text-[13px]">{formatDate(detail.date)}</div>
+                                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">
+                                                                EXP: {detail.expiry === 'Never' ? 'NEVER EXPIRES' : formatDate(detail.expiry)}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Badges Section */}
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold w-max ${getStatusStyle(detail.status)}`}>
+                                                            {getStatusIcon(detail.status)}
+                                                            {detail.status}
+                                                        </span>
+                                                        
+                                                        {detail.bookedDate && (
+                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max">
+                                                                <Calendar className="w-3 h-3" />
+                                                                {formatDate(detail.bookedDate)}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    {detail.bookedDate && <div className="text-[10px] mt-1 font-bold text-blue-700">Booked: {new Date(detail.bookedDate).toLocaleDateString('en-GB')}</div>}
-                                                    {detail.date && <div className="text-[10px] mt-0.5 opacity-80 font-medium">Done: {new Date(detail.date).toLocaleDateString('en-GB')}</div>}
-                                                    {detail.expiry && <div className={`text-[10px] font-bold mt-0.5 ${detail.baseStatus === 'Expired/Missing' ? 'text-red-600' : 'opacity-80'}`}>Exp: {detail.expiry === 'Never' ? 'Never' : new Date(detail.expiry).toLocaleDateString('en-GB')}</div>}
                                                 </div>
                                             </td>
                                         );
@@ -596,7 +610,7 @@ export default function TrainingMatrix() {
                                     <div key={i} className="flex justify-between items-center bg-white p-2 border border-slate-200 rounded-md shadow-sm">
                                         <span className="text-sm font-medium text-slate-700 flex items-center">
                                             {i === 0 && <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider mr-2">Latest</span>}
-                                            {new Date(d).toLocaleDateString('en-GB')}
+                                            {formatDate(d)}
                                         </span>
                                         <button onClick={() => removeHistoryDate(d)} className="text-slate-400 hover:text-red-500 p-1"><X className="w-4 h-4" /></button>
                                     </div>
