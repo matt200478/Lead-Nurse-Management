@@ -20,6 +20,8 @@ export default function ClinicRota() {
   const [activeWeek, setActiveWeek] = useState('master');
   const [isAddingWeek, setIsAddingWeek] = useState(false);
   const [newWeekDate, setNewWeekDate] = useState('');
+  const [weekToDelete, setWeekToDelete] = useState(null);
+  
   const [selectedCell, setSelectedCell] = useState(null); 
   const [formState, setFormState] = useState({ staffId: '', clinic: '' });
   
@@ -139,6 +141,15 @@ export default function ClinicRota() {
     setActiveWeek(newWeekDate);
     setIsAddingWeek(false);
     setNewWeekDate('');
+  };
+
+  const confirmDeleteWeek = () => {
+    if (!weekToDelete) return;
+    const newSchedules = { ...schedulesByWeek };
+    delete newSchedules[weekToDelete];
+    updateDb('schedulesByWeek', newSchedules);
+    setActiveWeek('master');
+    setWeekToDelete(null);
   };
 
   const handleUpdateTarget = (clinic, newTarget) => {
@@ -278,15 +289,22 @@ export default function ClinicRota() {
                 Clinic Rota: {activeWeek === 'master' ? 'Master Template' : `W/C ${new Date(activeWeek).toLocaleDateString('en-GB')}`}
               </span>
             </h2>
-            <select 
-              className="p-1.5 border border-slate-300 rounded-lg font-medium text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 min-w-[200px] print:hidden"
-              value={activeWeek} onChange={(e) => setActiveWeek(e.target.value)}
-            >
-              <option value="master">⭐ Master Template</option>
-              {Object.keys(schedulesByWeek).filter(k => k !== 'master').sort().map(w => (
-                <option key={w} value={w}>Week Commencing: {new Date(w).toLocaleDateString('en-GB')}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select 
+                className="p-1.5 border border-slate-300 rounded-lg font-medium text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 min-w-[200px] print:hidden"
+                value={activeWeek} onChange={(e) => setActiveWeek(e.target.value)}
+              >
+                <option value="master">⭐ Master Template</option>
+                {Object.keys(schedulesByWeek).filter(k => k !== 'master').sort().map(w => (
+                  <option key={w} value={w}>Week Commencing: {new Date(w).toLocaleDateString('en-GB')}</option>
+                ))}
+              </select>
+              {activeWeek !== 'master' && (
+                <button onClick={() => setWeekToDelete(activeWeek)} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 rounded-lg font-medium transition-colors print:hidden" title="Delete this week">
+                  <Trash2 className="w-4 h-4" /> Delete Week
+                </button>
+              )}
+            </div>
             <button onClick={() => setIsAddingWeek(true)} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded-lg font-medium transition-colors print:hidden">
               <Plus className="w-4 h-4" /> New Week
             </button>
@@ -412,6 +430,20 @@ export default function ClinicRota() {
                 <button onClick={handleCreateWeek} disabled={!newWeekDate} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50">Create</button>
                 <button onClick={() => { setIsAddingWeek(false); setNewWeekDate(''); }} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-medium transition-colors">Cancel</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {weekToDelete && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-96 text-center">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h4 className="text-lg font-bold mb-2">Delete Week?</h4>
+            <p className="text-sm text-slate-600 mb-6">Are you sure you want to permanently delete the rota for <strong>{new Date(weekToDelete).toLocaleDateString('en-GB')}</strong>?</p>
+            <div className="flex gap-3 w-full">
+              <button onClick={confirmDeleteWeek} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold transition-colors">Yes, Delete</button>
+              <button onClick={() => setWeekToDelete(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-bold transition-colors">Cancel</button>
             </div>
           </div>
         </div>
