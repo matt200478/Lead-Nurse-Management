@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2, Calendar } from 'lucide-react';
+import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2, Calendar, Upload } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getTrainingDocRef } from '../firebase';
@@ -83,6 +83,180 @@ export default function TrainingMatrix() {
         try { await updateDoc(getTrainingDocRef(), { courses: newCourses }); } 
         catch (e) { console.error("Database save failed:", e); }
     };
+
+    // --- CSV IMPORT LOGIC START ---
+
+    const handleImportCSV = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const text = event.target.result;
+            processCSVData(text);
+        };
+        reader.readAsText(file);
+        e.target.value = null; // Reset input so the same file can be selected again
+    };
+
+    const parseCSVLine = (text) => {
+        let result = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            if (text[i] === '"') {
+                inQuotes = !inQuotes;
+            } else if (text[i] === ',' && !inQuotes) {
+                result.push(cur);
+                cur = '';
+            } else {
+                cur += text[i];
+            }
+        }
+        result.push(cur);
+        return result.map(s => s.trim());
+    };
+
+    const parseMessyDate = (str) => {
+        if (!str) return null;
+        const match = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+        if (!match) return null;
+        let [ , d, m, y ] = match;
+        if (y.length === 2) y = '20' + y;
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    };
+
+    const parseCell = (val) => {
+        if (!val || val === '' || val.toLowerCase() === 'nan') return null;
+        if (val.toLowerCase() === 'n/a') return { override: 'N/A' };
+        if (val.toLowerCase() === 'in progress') return { override: 'Booked', history: [], bookedDate: '' };
+        
+        let date = null;
+        let bookedDate = null;
+        let override = 'Completed';
+        
+        if (val.includes(',')) {
+            const parts = val.split(',');
+            date = parseMessyDate(parts[0]);
+            bookedDate = parseMessyDate(parts[1]);
+        } else if (val.includes('*') || val.toLowerCase().includes('booked')) {
+            bookedDate = parseMessyDate(val);
+            override = 'Booked';
+        } else {
+            date = parseMessyDate(val);
+        }
+        
+        return {
+            date: date || '',
+            bookedDate: bookedDate || '',
+            override,
+            history: date ? [date] : []
+        };
+    };
+
+    const processCSVData = (text) => {
+        const rawLines = text.split(/\r?\n/);
+        const lines = rawLines.map(l => parseCSVLine(l));
+        
+        let headerIdx = -1;
+        for(let i=0; i<Math.min(5, lines.length); i++) {
+            if(lines[i][0] === 'Name' && lines[i][1] === 'Role') {
+                headerIdx = i;
+                break;
+            }
+        }
+        
+        if (headerIdx === -1) return alert("Could not find 'Name' and 'Role' headers in the CSV.");
+        
+        const courseHeaders = lines[headerIdx];
+        const freqHeaders = lines[headerIdx + 1];
+        
+        const parsedCourses = [];
+        for (let i = 2; i < courseHeaders.length; i++) {
+            const cName = courseHeaders[i];
+            if (!cName || cName.toLowerCase() === 'remarks') continue;
+            
+            let freqStr = freqHeaders[i];
+            let freq = 12; 
+            if (freqStr === 'Never') freq = null;
+            else if (parseInt(freqStr)) freq = parseInt(freqStr);
+            
+            parsedCourses.push({ index: i, name: cName, freq: freq });
+        }
+        
+        let updatedCourses = [...courses];
+        parsedCourses.forEach(pc => {
+            if (!updatedCourses.some(c => c.name.toLowerCase() === pc.name.toLowerCase())) {
+                updatedCourses.push({
+                    name: pc.name,
+                    freq: pc.freq,
+                    roles: roles.map(r => r.name)
+                });
+            }
+        });
+        
+        let updatedStaffList = [...staffList];
+        let maxId = updatedStaffList.length > 0 ? Math.max(...updatedStaffList.map(s => s.id)) : 0;
+        
+        for (let i = headerIdx + 2; i < lines.length; i++) {
+            const row = lines[i];
+            if (!row || !row[0]) continue;
+            
+            const rawName = row[0];
+            if (!rawName) continue;
+            
+            let rawRole = row[1] ? row[1] : 'Nurse';
+            let status = 'Active';
+            if (rawRole.includes('[ARCHIVED]')) {
+                status = 'Archived';
+                rawRole = rawRole.replace('[ARCHIVED]', '').trim();
+            }
+            
+            let staff = updatedStaffList.find(s => s.name.toLowerCase() === rawName.toLowerCase());
+            if (!staff) {
+                maxId++;
+                staff = {
+                    id: maxId,
+                    name: rawName,
+                    role: rawRole,
+                    status: status,
+                    contractedHours: 37.5,
+                    requiresWeekends: false,
+                    schedule: {},
+                    records: {},
+                    skills: []
+                };
+                updatedStaffList.push(staff);
+            } else {
+                staff.status = status;
+                staff.role = rawRole;
+            }
+            
+            if (!staff.records) staff.records = {};
+            
+            parsedCourses.forEach(pc => {
+                const cellVal = row[pc.index];
+                if (cellVal) {
+                    const parsed = parseCell(cellVal);
+                    if (parsed) {
+                        staff.records[pc.name] = parsed;
+                    }
+                }
+            });
+            
+            const remarksIdx = courseHeaders.findIndex(h => h && h.toLowerCase() === 'remarks');
+            if (remarksIdx > -1 && row[remarksIdx]) {
+                staff.remarks = row[remarksIdx];
+            }
+        }
+        
+        if(window.confirm(`Successfully extracted data for ${updatedStaffList.length} staff members and mapped ${parsedCourses.length} training courses.\n\nDo you want to import this data into the live database?`)) {
+             updateCourses(updatedCourses);
+             updateSharedStaff(updatedStaffList);
+        }
+    };
+
+    // --- CSV IMPORT LOGIC END ---
 
     const calculateCellStatus = (record, course, staffRole) => {
         const courseRoles = course.roles || roles.map(r => r.name);
@@ -404,6 +578,12 @@ export default function TrainingMatrix() {
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
                         </div>
+                        
+                        <input type="file" id="csv-upload" className="hidden" accept=".csv" onChange={handleImportCSV} />
+                        <button onClick={() => document.getElementById('csv-upload').click()} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium shadow-sm transition-all" title="Import from CSV">
+                            <Upload className="w-4 h-4" /> Import
+                        </button>
+                        
                         <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 rounded-lg font-medium shadow-sm transition-all" title="Download CSV">
                             <Download className="w-4 h-4" /> Export
                         </button>
@@ -554,7 +734,7 @@ export default function TrainingMatrix() {
                                                         </span>
                                                         
                                                         {detail.bookedDate && (
-                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max">
+                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max shadow-sm">
                                                                 <Calendar className="w-3 h-3" />
                                                                 {formatDate(detail.bookedDate)}
                                                             </span>
