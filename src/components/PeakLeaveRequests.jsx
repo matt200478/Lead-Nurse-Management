@@ -59,12 +59,9 @@ export default function PeakLeaveRequests() {
 
   const handleSubmit = () => {
     if (!currentStaffId || !formState.priority1) return;
-
-    // Check if staff already submitted to update instead of duplicate
-    const existingIndex = requests.findIndex(r => r.staffId === Number(currentStaffId));
     
     const newSubmission = {
-      id: existingIndex >= 0 ? requests[existingIndex].id : Date.now().toString(),
+      id: Date.now().toString(),
       staffId: Number(currentStaffId),
       priority1: formState.priority1,
       priority2: formState.priority2,
@@ -72,18 +69,17 @@ export default function PeakLeaveRequests() {
       submittedAt: new Date().toISOString()
     };
 
-    let updatedRequests = [...requests];
-    if (existingIndex >= 0) {
-      updatedRequests[existingIndex] = newSubmission;
-    } else {
-      updatedRequests.push(newSubmission);
-    }
+    // Append to existing requests (allowing multiple submissions per staff member)
+    const updatedRequests = [...requests, newSubmission];
 
     updateDoc(getLeaveRequestsDocRef(), { submissions: updatedRequests }).then(() => {
       setSubmitSuccess(true);
-      setTimeout(() => setSubmitSuccess(false), 3000);
-      setFormState({ priority1: '', priority2: '', notes: '' });
-      setCurrentStaffId('');
+      // Show success message for 3 seconds, then reset form for the next submission
+      setTimeout(() => {
+        setSubmitSuccess(false);
+        setFormState({ priority1: '', priority2: '', notes: '' });
+        setCurrentStaffId('');
+      }, 3000);
     }).catch(console.error);
   };
 
@@ -103,9 +99,6 @@ export default function PeakLeaveRequests() {
       </div>
     );
   }
-
-  // Check if current selected staff has already submitted
-  const hasSubmitted = currentStaffId ? requests.some(r => r.staffId === Number(currentStaffId)) : false;
 
   return (
     <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 p-4 md:p-8">
@@ -154,7 +147,7 @@ export default function PeakLeaveRequests() {
                 <div className="bg-emerald-50 text-emerald-800 p-6 rounded-xl text-center border border-emerald-200">
                   <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
                   <h3 className="text-lg font-black">Request Submitted Successfully!</h3>
-                  <p className="text-sm mt-2">Your peak leave priorities have been logged for review.</p>
+                  <p className="text-sm mt-2">Your peak leave priorities have been logged. The form will reset shortly.</p>
                 </div>
               ) : (
                 <>
@@ -170,7 +163,6 @@ export default function PeakLeaveRequests() {
                         <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
                       ))}
                     </select>
-                    {hasSubmitted && <p className="text-xs font-bold text-amber-600 mt-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> You have already submitted a request. Filling this out again will overwrite your previous entry.</p>}
                   </div>
 
                   <div>
@@ -214,7 +206,7 @@ export default function PeakLeaveRequests() {
                       disabled={!currentStaffId || !formState.priority1}
                       className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-bold transition-all shadow-sm"
                     >
-                      {hasSubmitted ? 'Update My Request' : 'Submit Leave Request'}
+                      Submit Leave Request
                     </button>
                   </div>
                 </>
