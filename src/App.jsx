@@ -9,7 +9,8 @@ import {
   ChevronLeft, 
   ChevronRight,
   Stethoscope,
-  Settings 
+  Settings,
+  Palmtree
 } from 'lucide-react';
 import { signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { auth } from './firebase';
@@ -21,6 +22,7 @@ import TrainingMatrix from './components/TrainingMatrix';
 import AnnualLeaveCalculator from './components/AnnualLeaveCalculator';
 import CoverBoard from './components/CoverBoard';
 import PracticeSettings from './components/PracticeSettings';
+import PeakLeaveRequests from './components/PeakLeaveRequests';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -90,6 +92,11 @@ export default function App() {
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Leave Calculator</span>}
           </button>
 
+          <button onClick={() => setCurrentView('leave_requests')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'leave_requests' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Palmtree className="w-5 h-5 shrink-0" />
+            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Leave Requests</span>}
+          </button>
+
           <div className="mt-auto">
             <button onClick={() => setCurrentView('settings')} className={`w-full flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'settings' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
               <Settings className="w-5 h-5 shrink-0" />
@@ -112,6 +119,7 @@ export default function App() {
         {currentView === 'staff' && <StaffDirectory />}
         {currentView === 'training' && <TrainingMatrix />}
         {currentView === 'leave' && <AnnualLeaveCalculator />}
+        {currentView === 'leave_requests' && <PeakLeaveRequests />}
         {currentView === 'settings' && <PracticeSettings />}
       </div>
     </div>
