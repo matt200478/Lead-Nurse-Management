@@ -96,7 +96,7 @@ export default function TrainingMatrix() {
             processCSVData(text);
         };
         reader.readAsText(file);
-        e.target.value = null; // Reset input so the same file can be selected again
+        e.target.value = null; 
     };
 
     const parseCSVLine = (text) => {
@@ -289,7 +289,7 @@ export default function TrainingMatrix() {
             expiryDate = new Date(compDate);
             expiryDate.setMonth(expiryDate.getMonth() + course.freq);
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Normalize today
+            today.setHours(0, 0, 0, 0); 
             diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
         }
 
@@ -557,7 +557,7 @@ export default function TrainingMatrix() {
     const complianceRate = totalApplicable > 0 ? Math.round((totalValid / totalApplicable) * 100) : 100;
 
     return (
-        <div className="flex-1 bg-white min-h-full font-sans text-slate-800 print:bg-white print:p-0">
+        <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 print:bg-white print:p-0">
             <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-4 shadow-sm print:hidden">
                 <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 max-w-7xl mx-auto">
                     <div>
@@ -652,12 +652,13 @@ export default function TrainingMatrix() {
                     </button>
                 </div>
 
-                <div className="bg-white overflow-x-auto print:overflow-visible">
-                    <table className="w-full text-left border-collapse text-sm">
-                        <thead>
-                            <tr className="border-b border-slate-200 bg-white">
+                {/* SCROLLABLE TABLE CONTAINER */}
+                <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-auto max-h-[70vh] print:overflow-visible print:border-none print:shadow-none print:max-h-none">
+                    <table className="w-full text-left border-collapse text-sm relative">
+                        <thead className="sticky top-0 z-30 shadow-sm print:static print:shadow-none">
+                            <tr className="bg-white">
                                 <th 
-                                    className="p-4 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-50 sticky left-0 z-10 bg-white border-r border-slate-100 min-w-[200px]"
+                                    className="p-4 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-50 sticky left-0 z-40 bg-white border-r border-b border-slate-200 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static"
                                     onClick={() => handleSort('name')}
                                 >
                                     Staff Member
@@ -665,7 +666,7 @@ export default function TrainingMatrix() {
                                 {courses.map(course => (
                                     <th 
                                         key={course.name} 
-                                        className="p-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-50 border-r border-slate-100 align-bottom min-w-[150px]"
+                                        className="p-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-50 bg-white border-r border-b border-slate-200 align-bottom min-w-[150px]"
                                         onClick={() => handleSort(course.name)}
                                     >
                                         <div className="whitespace-normal leading-tight text-base mb-1">{course.name}</div>
@@ -681,7 +682,7 @@ export default function TrainingMatrix() {
                                 const records = staff.records || {};
                                 return (
                                 <tr key={idx} className={`border-b border-slate-100 transition-colors print:border-slate-300 ${staff.status === 'Archived' ? 'opacity-50 grayscale' : ''}`}>
-                                    <td className="p-4 sticky left-0 z-10 bg-white border-r border-slate-100 align-top">
+                                    <td className="p-4 sticky left-0 z-20 bg-white border-r border-b border-slate-100 align-top shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static">
                                         <div className="font-bold text-indigo-700 text-base flex items-center gap-2">
                                           {staff.name} 
                                           {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Archived</span>}
