@@ -36,3 +36,10 @@ export const getCoverBoardDocRef = () => {
   if (segments.length % 2 !== 0) segments.push('doc');
   return doc(db, ...segments);
 };
+
+export const getLeaveRequestsDocRef = () => {
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'rota-manager-app';
+  const segments = ['artifacts', ...appId.split('/'), 'public', 'data', 'clinic_rota', 'leave_requests'];
+  if (segments.length % 2 !== 0) segments.push('doc');
+  return doc(db, ...segments);
+};
