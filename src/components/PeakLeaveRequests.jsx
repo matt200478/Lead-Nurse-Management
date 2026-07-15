@@ -6,10 +6,10 @@ import { auth, getRotaDocRef, getLeaveRequestsDocRef } from '../firebase';
 
 const HOLIDAY_BLOCKS = [
   'October Half-Term',
-  'Christmas/New Year Block',
+  'Christmas Block',
+  'New Year Block',
   'February Half-Term',
-  'Easter Holidays',
-  'Summer Peak Block'
+  'Easter Holidays'
 ];
 
 export default function PeakLeaveRequests() {
@@ -69,12 +69,10 @@ export default function PeakLeaveRequests() {
       submittedAt: new Date().toISOString()
     };
 
-    // Append to existing requests (allowing multiple submissions per staff member)
     const updatedRequests = [...requests, newSubmission];
 
     updateDoc(getLeaveRequestsDocRef(), { submissions: updatedRequests }).then(() => {
       setSubmitSuccess(true);
-      // Show success message for 3 seconds, then reset form for the next submission
       setTimeout(() => {
         setSubmitSuccess(false);
         setFormState({ priority1: '', priority2: '', notes: '' });
@@ -104,7 +102,6 @@ export default function PeakLeaveRequests() {
     <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
         
-        {/* Header & Toggle */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
@@ -214,7 +211,6 @@ export default function PeakLeaveRequests() {
             </div>
           </div>
         ) : (
-          /* LEAD NURSE DASHBOARD */
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
               <div>
