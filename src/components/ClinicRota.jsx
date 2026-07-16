@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Plus, Trash2, User, Settings, X, ChevronLeft, ChevronRight, Calendar, Printer, CalendarDays, Layout, Loader2, Star, Activity, Edit2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Plus, Trash2, User, Settings, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Calendar, Printer, CalendarDays, Layout, Loader2, Star, Activity, Edit2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -202,6 +202,19 @@ export default function ClinicRota() {
     updateDb('roomList', roomList.filter(r => r.id !== id));
     updateDb('schedulesByWeek', newSchedules);
     setRoomToDelete(null);
+  };
+
+  const moveRoom = (index, direction) => {
+    const newRoomList = [...roomList];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= newRoomList.length) return;
+    
+    // Swap the rooms
+    const temp = newRoomList[index];
+    newRoomList[index] = newRoomList[targetIndex];
+    newRoomList[targetIndex] = temp;
+    
+    updateDb('roomList', newRoomList);
   };
 
   const getStaffName = (id) => staffList.find(s => s.id === id)?.name || '';
@@ -518,13 +531,18 @@ export default function ClinicRota() {
                     <Plus className="w-4 h-4" /> Add New Room
                   </button>
                   <div className="space-y-2">
-                    {roomList.map(room => (
+                    {roomList.map((room, index) => (
                       <div key={room.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg bg-slate-50">
                         <div className="font-medium text-sm text-slate-800 flex items-center gap-2">
                           <span className="w-3 h-3 rounded-full" style={{ backgroundColor: room.color || '#e2e8f0' }}></span>
                           {room.name}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5 items-center">
+                          <div className="flex flex-col gap-0.5 mr-2">
+                             <button onClick={() => moveRoom(index, -1)} disabled={index === 0} className="text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors" title="Move Up"><ChevronUp className="w-4 h-4" /></button>
+                             <button onClick={() => moveRoom(index, 1)} disabled={index === roomList.length - 1} className="text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors" title="Move Down"><ChevronDown className="w-4 h-4" /></button>
+                          </div>
+                          <div className="w-px h-6 bg-slate-300 mx-1"></div>
                           <button onClick={() => setEditingRoom(room)} className="p-1.5 text-slate-500 hover:text-blue-600 rounded bg-white border border-slate-200 shadow-sm"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => setRoomToDelete(room)} className="p-1.5 text-slate-500 hover:text-red-600 rounded bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4" /></button>
                         </div>
