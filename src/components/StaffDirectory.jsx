@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock, Printer, Lock } from 'lucide-react';
+import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock, Printer, Lock, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -62,7 +62,6 @@ export default function StaffDirectory() {
   const handleSaveStaff = () => {
     if (!editingStaff.name.trim()) return;
     
-    // Default to the first role in the array if somehow left blank
     const defaultRole = roles.length > 0 ? roles[0].name : 'Nurse';
     
     const staffToSave = {
@@ -74,7 +73,7 @@ export default function StaffDirectory() {
       contractedHours: parseFloat(editingStaff.contractedHours) || 0,
       requiresWeekends: editingStaff.requiresWeekends || false,
       schedule: editingStaff.schedule || {},
-      pin: editingStaff.pin || '0000' // Ensure fallback to 0000
+      pin: editingStaff.pin || '0000'
     };
 
     let newStaffList = editingStaff.id 
@@ -160,10 +159,7 @@ export default function StaffDirectory() {
         {`
           @media print {
             @page { size: A4 landscape; margin: 4mm; }
-            body { 
-              -webkit-print-color-adjust: exact; 
-              print-color-adjust: exact; 
-            }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             table { width: 100%; border-collapse: collapse; }
             th, td { padding: 2px 4px !important; }
             * { line-height: 1.1 !important; }
@@ -185,7 +181,6 @@ export default function StaffDirectory() {
             <button 
               onClick={() => window.print()}
               className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 rounded-lg font-medium shadow-sm transition-all"
-              title="Save as PDF or Print"
             >
               <Printer className="w-4 h-4" /> Export PDF
             </button>
@@ -218,7 +213,7 @@ export default function StaffDirectory() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 print:bg-white print:border-slate-300">
-                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-48 print:shadow-none print:bg-white print:static print:w-auto print:p-1 print:text-[10px]">Staff Member</th>
+                <th className="p-4 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-56 print:shadow-none print:bg-white print:static print:w-auto print:p-1 print:text-[10px]">Staff Member</th>
                 {activeDays.map(day => (
                   <th key={day} className="p-4 font-bold text-slate-700 text-center border-l border-slate-200 min-w-[120px] print:min-w-0 print:border-slate-300 print:p-1 print:text-[10px]">{day}</th>
                 ))}
@@ -229,6 +224,9 @@ export default function StaffDirectory() {
             <tbody>
               {filteredStaff.length > 0 ? filteredStaff.map(staff => {
                 const compliance = calculateWeeklyCompliance(staff);
+                const staffRoleDef = roles.find(r => r.name === staff.role);
+                const hasAdminAccess = staffRoleDef?.isAdmin || (!staffRoleDef && (staff.role.toLowerCase().includes('lead') || staff.role.toLowerCase().includes('manager')));
+
                 return (
                   <tr key={staff.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors print:break-inside-avoid print:border-slate-300 ${staff.status === 'Archived' ? 'bg-slate-50/50 opacity-60' : ''}`}>
                     
@@ -242,7 +240,21 @@ export default function StaffDirectory() {
                         {staff.name} 
                         <span className="text-[10px] text-slate-500 font-normal hidden print:inline">({staff.role})</span>
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5 print:hidden">{staff.role}</div>
+                      
+                      <div className="flex items-center flex-wrap mt-1 print:hidden gap-1.5">
+                        <div className="bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase font-bold text-[10px] px-2 py-0.5 rounded tracking-wider">
+                          {staff.role}
+                        </div>
+                        {hasAdminAccess ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded font-bold tracking-wider flex items-center gap-1 inline-flex">
+                            <ShieldCheck className="w-3 h-3" /> Admin
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-bold tracking-wider flex items-center gap-1 inline-flex">
+                            <UserIcon className="w-3 h-3" /> Staff
+                          </span>
+                        )}
+                      </div>
                       
                       {(staff.requiresWeekends || staff.status === 'Archived') && (
                         <div className="flex flex-wrap gap-1 mt-1.5 print:mt-0.5">
