@@ -1,20 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ShieldCheck, 
-  LayoutDashboard, 
-  CalendarDays, 
-  Users, 
-  GraduationCap, 
-  Calculator, 
-  ChevronLeft, 
-  ChevronRight,
-  Stethoscope,
-  Settings,
-  Palmtree
+  ShieldCheck, LayoutDashboard, CalendarDays, Users, GraduationCap, 
+  Calculator, ChevronLeft, ChevronRight, Stethoscope, Settings, Palmtree, LogOut
 } from 'lucide-react';
-import { signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { signInAnonymously } from 'firebase/auth';
 import { auth } from './firebase';
 
+import LockScreen from './components/LockScreen';
 import DashboardHome from './components/DashboardHome';
 import ClinicRota from './components/ClinicRota';
 import StaffDirectory from './components/StaffDirectory';
@@ -25,21 +17,25 @@ import PracticeSettings from './components/PracticeSettings';
 import PeakLeaveRequests from './components/PeakLeaveRequests';
 
 export default function App() {
+  const [activeUser, setActiveUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isGlobalSidebarOpen, setIsGlobalSidebarOpen] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) { console.error("Auth Failed:", err); }
-    };
-    initAuth();
+    signInAnonymously(auth).catch(console.error);
   }, []);
+
+  if (!activeUser) {
+    return <LockScreen onLogin={(user) => { setActiveUser(user); setCurrentView('dashboard'); }} />;
+  }
+
+  // Determine if the logged-in user has Admin privileges
+  const userRole = activeUser.role?.toLowerCase() || '';
+  const isAdmin = userRole.includes('lead') || userRole.includes('manager') || activeUser.name.toLowerCase().includes('michelle');
+
+  const handleLogout = () => {
+    setActiveUser(null);
+  };
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
@@ -61,66 +57,72 @@ export default function App() {
           )}
         </div>
         
-        <div className="flex-1 py-6 flex flex-col gap-2 px-4 overflow-hidden">
+        <div className="flex-1 py-6 flex flex-col gap-2 px-4 overflow-hidden overflow-y-auto custom-scrollbar">
           <button onClick={() => setCurrentView('dashboard')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
             <LayoutDashboard className="w-5 h-5 shrink-0" />
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Home</span>}
           </button>
           
-          <button onClick={() => setCurrentView('rota')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'rota' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <CalendarDays className="w-5 h-5 shrink-0" />
-            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Clinic Rota</span>}
-          </button>
+          {isAdmin && (
+            <button onClick={() => setCurrentView('rota')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'rota' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+              <CalendarDays className="w-5 h-5 shrink-0" />
+              {isGlobalSidebarOpen && <span className="whitespace-nowrap">Clinic Rota</span>}
+            </button>
+          )}
 
           <button onClick={() => setCurrentView('cover')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'cover' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
             <Stethoscope className="w-5 h-5 shrink-0" />
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Cover Board</span>}
           </button>
 
-          <button onClick={() => setCurrentView('staff')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'staff' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Users className="w-5 h-5 shrink-0" />
-            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Staff Directory</span>}
-          </button>
+          {isAdmin && (
+            <>
+              <button onClick={() => setCurrentView('staff')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'staff' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Users className="w-5 h-5 shrink-0" />
+                {isGlobalSidebarOpen && <span className="whitespace-nowrap">Staff Directory</span>}
+              </button>
 
-          <button onClick={() => setCurrentView('training')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'training' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <GraduationCap className="w-5 h-5 shrink-0" />
-            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Training Matrix</span>}
-          </button>
-          
-          <button onClick={() => setCurrentView('leave')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'leave' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Calculator className="w-5 h-5 shrink-0" />
-            {isGlobalSidebarOpen && <span className="whitespace-nowrap">Leave Calculator</span>}
-          </button>
+              <button onClick={() => setCurrentView('training')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'training' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <GraduationCap className="w-5 h-5 shrink-0" />
+                {isGlobalSidebarOpen && <span className="whitespace-nowrap">Training Matrix</span>}
+              </button>
+              
+              <button onClick={() => setCurrentView('leave')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'leave' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Calculator className="w-5 h-5 shrink-0" />
+                {isGlobalSidebarOpen && <span className="whitespace-nowrap">Leave Calculator</span>}
+              </button>
+            </>
+          )}
 
           <button onClick={() => setCurrentView('leave_requests')} className={`flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'leave_requests' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
             <Palmtree className="w-5 h-5 shrink-0" />
             {isGlobalSidebarOpen && <span className="whitespace-nowrap">Leave Requests</span>}
           </button>
 
-          <div className="mt-auto">
-            <button onClick={() => setCurrentView('settings')} className={`w-full flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'settings' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-              <Settings className="w-5 h-5 shrink-0" />
-              {isGlobalSidebarOpen && <span className="whitespace-nowrap">Settings</span>}
+          <div className="mt-auto pt-4 space-y-2">
+            {isAdmin && (
+              <button onClick={() => setCurrentView('settings')} className={`w-full flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors ${currentView === 'settings' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Settings className="w-5 h-5 shrink-0" />
+                {isGlobalSidebarOpen && <span className="whitespace-nowrap">Settings</span>}
+              </button>
+            )}
+            <button onClick={handleLogout} className={`w-full flex items-center ${isGlobalSidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center p-3'} rounded-xl font-medium transition-colors text-rose-400 hover:bg-rose-500/10 hover:text-rose-300`}>
+              <LogOut className="w-5 h-5 shrink-0" />
+              {isGlobalSidebarOpen && <span className="whitespace-nowrap">Lock System</span>}
             </button>
           </div>
         </div>
-
-        {isGlobalSidebarOpen && (
-          <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center whitespace-nowrap">
-            Bourne Galletly Internal Tools
-          </div>
-        )}
       </div>
 
       <div className="flex-1 overflow-auto bg-slate-100 relative">
-        {currentView === 'dashboard' && <DashboardHome setView={setCurrentView} />}
-        {currentView === 'rota' && <ClinicRota />}
-        {currentView === 'cover' && <CoverBoard />}
-        {currentView === 'staff' && <StaffDirectory />}
-        {currentView === 'training' && <TrainingMatrix />}
-        {currentView === 'leave' && <AnnualLeaveCalculator />}
-        {currentView === 'leave_requests' && <PeakLeaveRequests />}
-        {currentView === 'settings' && <PracticeSettings />}
+        {currentView === 'dashboard' && <DashboardHome setView={setCurrentView} isAdmin={isAdmin} />}
+        {currentView === 'rota' && isAdmin && <ClinicRota />}
+        {currentView === 'cover' && <CoverBoard activeUser={activeUser} isAdmin={isAdmin} />}
+        {currentView === 'staff' && isAdmin && <StaffDirectory />}
+        {currentView === 'training' && isAdmin && <TrainingMatrix />}
+        {currentView === 'leave' && isAdmin && <AnnualLeaveCalculator />}
+        {currentView === 'leave_requests' && <PeakLeaveRequests activeUser={activeUser} isAdmin={isAdmin} />}
+        {currentView === 'settings' && isAdmin && <PracticeSettings />}
       </div>
     </div>
   );
