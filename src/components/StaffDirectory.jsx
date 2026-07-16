@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock, Printer } from 'lucide-react';
+import { Contact, Search, Plus, Trash2, X, AlertCircle, Loader2, CalendarDays, CheckCircle, Moon, Clock, Printer, Lock } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -11,7 +11,7 @@ export default function StaffDirectory() {
   
   const [staffList, setStaffList] = useState(INITIAL_UNIFIED_STAFF);
   const [schedulesByWeek, setSchedulesByWeek] = useState({});
-  const [roles, setRoles] = useState([]); // Added state for dynamic roles
+  const [roles, setRoles] = useState([]); 
   
   const [searchQuery, setSearchQuery] = useState('');
   const [editingStaff, setEditingStaff] = useState(null);
@@ -33,7 +33,7 @@ export default function StaffDirectory() {
           const data = docSnap.data();
           if (data.staffList) setStaffList(data.staffList);
           if (data.schedulesByWeek) setSchedulesByWeek(data.schedulesByWeek);
-          if (data.roles) setRoles(data.roles); // Pull roles from DB
+          if (data.roles) setRoles(data.roles); 
         } else {
           setDoc(getRotaDocRef(), {
             targets: INITIAL_TARGETS,
@@ -73,7 +73,8 @@ export default function StaffDirectory() {
       status: editingStaff.status || 'Active',
       contractedHours: parseFloat(editingStaff.contractedHours) || 0,
       requiresWeekends: editingStaff.requiresWeekends || false,
-      schedule: editingStaff.schedule || {}
+      schedule: editingStaff.schedule || {},
+      pin: editingStaff.pin || '0000' // Ensure fallback to 0000
     };
 
     let newStaffList = editingStaff.id 
@@ -155,7 +156,6 @@ export default function StaffDirectory() {
   return (
     <div className="flex-1 bg-gray-50 min-h-full font-sans text-slate-800 p-4 md:p-8 overflow-x-auto print:bg-white print:p-0 print:overflow-visible">
       
-      {/* Injecting Aggressive CSS specifically for ultra-compact A4 Landscape PDF Printing */}
       <style>
         {`
           @media print {
@@ -181,7 +181,6 @@ export default function StaffDirectory() {
             <p className="text-sm text-slate-500 font-medium mt-1 print:text-[9px] print:mt-1 print:leading-none">Manage personnel, view weekly working hours, and track compliance.</p>
           </div>
           
-          {/* Action Buttons (Hidden on Print) */}
           <div className="flex items-center gap-3 w-full md:w-auto print:hidden flex-wrap">
             <button 
               onClick={() => window.print()}
@@ -207,7 +206,7 @@ export default function StaffDirectory() {
               />
             </div>
             <button 
-              onClick={() => setEditingStaff({ name: '', role: roles.length > 0 ? roles[0].name : 'Nurse', status: 'Active', contractedHours: 37.5, requiresWeekends: false, schedule: {} })} 
+              onClick={() => setEditingStaff({ name: '', role: roles.length > 0 ? roles[0].name : 'Nurse', status: 'Active', contractedHours: 37.5, requiresWeekends: false, schedule: {}, pin: '0000' })} 
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-sm hover:bg-indigo-700 transition-all whitespace-nowrap"
             >
               <Plus className="w-4 h-4" /> Add Staff
@@ -314,17 +313,16 @@ export default function StaffDirectory() {
           </table>
         </div>
 
-        {/* MODALS REMAIN UNCHANGED AND ARE HIDDEN DURING PRINT AUTOMATICALLY VIA tailwind print:hidden */}
         {editingStaff && (
           <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 print:hidden">
-            <div className="bg-white rounded-xl shadow-xl w-[700px] max-w-[95vw] max-h-[90vh] flex flex-col relative">
+            <div className="bg-white rounded-xl shadow-xl w-[800px] max-w-[95vw] max-h-[90vh] flex flex-col relative">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                 <h3 className="text-lg font-bold">{editingStaff.id ? 'Edit Staff & Hours' : 'Add New Staff'}</h3>
                 <button onClick={() => setEditingStaff(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
               </div>
               
               <div className="p-6 overflow-y-auto space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Full Name</label>
                     <input type="text" value={editingStaff.name} onChange={(e) => setEditingStaff({...editingStaff, name: e.target.value})} placeholder="e.g. Sarah Jones" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -339,11 +337,21 @@ export default function StaffDirectory() {
                       {roles.map(r => (
                         <option key={r.id} value={r.name}>{r.name}</option>
                       ))}
-                      {/* Fallback to show current role if it was deleted from settings */}
                       {editingStaff.role && !roles.some(r => r.name === editingStaff.role) && (
                         <option value={editingStaff.role}>{editingStaff.role} (Legacy)</option>
                       )}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-indigo-500" /> Access PIN</label>
+                    <input 
+                      type="text" 
+                      maxLength="4"
+                      placeholder="0000"
+                      value={editingStaff.pin || ''} 
+                      onChange={(e) => setEditingStaff({...editingStaff, pin: e.target.value.replace(/\D/g, '')})} 
+                      className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-mono tracking-widest text-center text-indigo-700 font-bold bg-indigo-50" 
+                    />
                   </div>
                 </div>
 
@@ -402,7 +410,7 @@ export default function StaffDirectory() {
               
               <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 rounded-b-xl">
                 <button onClick={() => setEditingStaff(null)} className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-bold transition-colors hover:bg-slate-50">Cancel</button>
-                <button onClick={handleSaveStaff} disabled={!editingStaff.name.trim()} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 shadow-sm">Save Profile & Hours</button>
+                <button onClick={handleSaveStaff} disabled={!editingStaff.name.trim() || (editingStaff.pin && editingStaff.pin.length !== 4 && editingStaff.pin.length !== 0)} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 shadow-sm">Save Profile</button>
               </div>
             </div>
           </div>
