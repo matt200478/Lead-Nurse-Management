@@ -38,10 +38,13 @@ export default function PeakLeaveRequests() {
   const [draftAllocation, setDraftAllocation] = useState(null);
   const [viewYear, setViewYear] = useState('Current');
 
-  // Dynamic Year Calculation (e.g. Currently 2026, planning for 2027)
-  const currentYear = new Date().getFullYear();
-  const planningYear = (currentYear + 1).toString();
-  const lastYear = currentYear.toString();
+  // Dynamic Leave Year Calculation (Runs 1st April to 31st March)
+  const today = new Date();
+  // If current month is Jan, Feb, or Mar (0, 1, 2), the leave year started last calendar year
+  const currentLeaveYearStart = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
+  
+  const lastYear = `${currentLeaveYearStart}/${(currentLeaveYearStart + 1).toString().slice(-2)}`; // e.g. "2026/27"
+  const planningYear = `${currentLeaveYearStart + 1}/${(currentLeaveYearStart + 2).toString().slice(-2)}`; // e.g. "2027/28"
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -249,7 +252,7 @@ export default function PeakLeaveRequests() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-800">Annual Peak Leave Form ({planningYear})</h2>
-                <p className="text-sm text-slate-600 mt-1">Please select your top priority holiday block for the upcoming year. Allocations are based on the historical fair-share system to ensure everyone gets a fair turn.</p>
+                <p className="text-sm text-slate-600 mt-1">Please select your top priority holiday block for the upcoming leave year. Allocations are based on the historical fair-share system to ensure everyone gets a fair turn.</p>
               </div>
             </div>
 
