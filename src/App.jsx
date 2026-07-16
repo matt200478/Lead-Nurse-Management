@@ -4,7 +4,8 @@ import {
   Calculator, ChevronLeft, ChevronRight, Stethoscope, Settings, Palmtree, LogOut
 } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
-import { auth } from './firebase';
+import { onSnapshot } from 'firebase/firestore';
+import { auth, getRotaDocRef } from './firebase';
 
 import LockScreen from './components/LockScreen';
 import DashboardHome from './components/DashboardHome';
@@ -20,18 +21,28 @@ export default function App() {
   const [activeUser, setActiveUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isGlobalSidebarOpen, setIsGlobalSidebarOpen] = useState(true);
+  const [roles, setRoles] = useState([]);
 
   useEffect(() => {
     signInAnonymously(auth).catch(console.error);
+
+    // Fetch roles globally so App.jsx knows the security rules
+    const unsub = onSnapshot(getRotaDocRef(), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().roles) {
+        setRoles(docSnap.data().roles);
+      }
+    });
+    return () => unsub();
   }, []);
 
   if (!activeUser) {
     return <LockScreen onLogin={(user) => { setActiveUser(user); setCurrentView('dashboard'); }} />;
   }
 
-  // Determine if the logged-in user has Admin privileges
-  const userRole = activeUser.role?.toLowerCase() || '';
-  const isAdmin = userRole.includes('lead') || userRole.includes('manager') || activeUser.name.toLowerCase().includes('michelle');
+  // Determine Admin status securely based on the Database Role configuration
+  const userRoleObj = roles.find(r => r.name === activeUser.role);
+  // Fallback string matching just in case the settings page hasn't been fully configured yet
+  const isAdmin = userRoleObj?.isAdmin || (!userRoleObj && (activeUser.role.toLowerCase().includes('lead') || activeUser.role.toLowerCase().includes('manager')));
 
   const handleLogout = () => {
     setActiveUser(null);
