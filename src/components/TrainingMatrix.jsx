@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2, Calendar, Upload } from 'lucide-react';
+import { GraduationCap, Search, Download, Printer, BookOpen, Users, Activity, UserCheck, AlertTriangle, AlertCircle, Archive, CheckCircle, XCircle, Clock, X, Plus, Trash2, Edit2, Loader2, Calendar, Upload, ClipboardCheck } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef, getTrainingDocRef } from '../firebase';
@@ -279,7 +279,16 @@ export default function TrainingMatrix() {
             completedDateStr = null; 
         }
 
-        if (!completedDateStr && !bookedDateStr && record.override !== 'N/A') return { status: 'Missing' };
+        let isAwaiting = false;
+        if (bookedDateStr) {
+            const bDate = new Date(bookedDateStr);
+            bDate.setHours(0,0,0,0);
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            if (bDate <= today) {
+                isAwaiting = true;
+            }
+        }
 
         let expiryDate = null;
         let diffDays = -1;
@@ -294,7 +303,9 @@ export default function TrainingMatrix() {
         }
 
         let status = 'Valid';
-        if (!completedDateStr) {
+        if (isAwaiting) {
+            status = 'Awaiting Review';
+        } else if (!completedDateStr) {
             status = bookedDateStr ? 'In Progress' : 'Missing';
         } else if (diffDays < 0 && course.freq) {
             status = 'Expired';
@@ -331,6 +342,7 @@ export default function TrainingMatrix() {
                     const records = staff.records || {};
                     const detail = calculateCellStatus(records[c.name], c, staff.role);
                     if (detail.status === 'N/A') return '"N/A"';
+                    if (detail.status === 'Awaiting Review') return `"Awaiting Review: ${formatDate(detail.bookedDate)}"`;
                     if (detail.status === 'In Progress') return `"In Progress: ${formatDate(detail.bookedDate)}"`;
                     if (!detail.date) return '"Missing"';
                     return `"${formatDate(detail.date)} (Exp: ${detail.expiry === 'Never' ? 'Never' : formatDate(detail.expiry)})"`;
@@ -418,6 +430,27 @@ export default function TrainingMatrix() {
         setCellForm({...cellForm, history: cellForm.history.filter(d => d !== dateToRemove)});
     };
 
+    // --- PENDING CONFIRMATIONS HANDLER ---
+    const handleConfirmTraining = (staffId, courseName, record, passed) => {
+        const newStaffList = staffList.map(s => {
+            if (s.id === staffId) {
+                const newRecord = { ...record };
+                if (passed && newRecord.bookedDate) {
+                    newRecord.history = [...(newRecord.history || []), newRecord.bookedDate].sort((a,b) => new Date(b) - new Date(a));
+                }
+                newRecord.bookedDate = '';
+                if (newRecord.override === 'Booked') newRecord.override = 'Completed';
+                
+                return {
+                    ...s,
+                    records: { ...s.records, [courseName]: newRecord }
+                };
+            }
+            return s;
+        });
+        updateSharedStaff(newStaffList);
+    };
+
     const toggleRole = (rolesList, setRolesList, roleToToggle) => {
         if (rolesList.includes(roleToToggle)) {
             setRolesList(rolesList.filter(r => r !== roleToToggle));
@@ -497,6 +530,7 @@ export default function TrainingMatrix() {
             case 'Expired': return 'bg-rose-100 text-rose-700';
             case 'Missing': return 'bg-rose-100 text-rose-700';
             case 'In Progress': return 'bg-blue-100 text-blue-700';
+            case 'Awaiting Review': return 'bg-purple-100 text-purple-700';
             default: return 'bg-slate-100 text-slate-600';
         }
     };
@@ -508,6 +542,7 @@ export default function TrainingMatrix() {
             case 'Expired': return <XCircle className="w-3.5 h-3.5" />;
             case 'Missing': return <AlertCircle className="w-3.5 h-3.5" />;
             case 'In Progress': return <Clock className="w-3.5 h-3.5" />;
+            case 'Awaiting Review': return <ClipboardCheck className="w-3.5 h-3.5" />;
             default: return null;
         }
     };
@@ -555,6 +590,24 @@ export default function TrainingMatrix() {
         });
     });
     const complianceRate = totalApplicable > 0 ? Math.round((totalValid / totalApplicable) * 100) : 100;
+
+    // Identify pending confirmations across all active staff (ignores filters so they are never missed)
+    const pendingConfirmations = [];
+    staffList.forEach(staff => {
+        if (staff.status === 'Archived') return;
+        courses.forEach(c => {
+            const record = (staff.records || {})[c.name];
+            if (record && record.bookedDate) {
+                const bDate = new Date(record.bookedDate);
+                bDate.setHours(0,0,0,0);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                if (bDate <= today) {
+                    pendingConfirmations.push({ staff, course: c, record });
+                }
+            }
+        });
+    });
 
     return (
         <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 print:bg-white print:p-0">
@@ -632,6 +685,37 @@ export default function TrainingMatrix() {
                     </div>
                 </div>
 
+                {/* AWAITING CONFIRMATION INBOX */}
+                {pendingConfirmations.length > 0 && (
+                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm print:hidden">
+                        <div className="bg-purple-100 border-b border-purple-200 p-4 flex items-center gap-3">
+                            <ClipboardCheck className="w-6 h-6 text-purple-700" />
+                            <div>
+                                <h2 className="text-sm font-bold text-purple-900">Action Required: Training Awaiting Authorisation</h2>
+                                <p className="text-xs text-purple-700 mt-0.5">The following scheduled training dates have passed. Please confirm if the staff member completed the course.</p>
+                            </div>
+                        </div>
+                        <div className="divide-y divide-purple-100">
+                            {pendingConfirmations.map((item, idx) => (
+                                <div key={idx} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                    <div>
+                                        <p className="font-bold text-slate-800 text-sm">{item.staff.name} <span className="text-slate-500 font-normal ml-1">• {item.course.name}</span></p>
+                                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Scheduled for: {formatDate(item.record.bookedDate)}</p>
+                                    </div>
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, true)} className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                            <CheckCircle className="w-4 h-4"/> Confirm Passed
+                                        </button>
+                                        <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, false)} className="flex-1 sm:flex-none px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                            <XCircle className="w-4 h-4"/> Missed / Failed
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="mb-4 flex flex-wrap gap-2 pb-2 print:hidden justify-between items-center">
                     <div className="flex gap-2 flex-wrap">
                         {['All', ...roles.map(r => r.name)].map(role => (
@@ -652,7 +736,6 @@ export default function TrainingMatrix() {
                     </button>
                 </div>
 
-                {/* SCROLLABLE TABLE CONTAINER */}
                 <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-auto max-h-[70vh] print:overflow-visible print:border-none print:shadow-none print:max-h-none">
                     <table className="w-full text-left border-collapse text-sm relative">
                         <thead className="sticky top-0 z-30 shadow-sm print:static print:shadow-none">
@@ -734,7 +817,7 @@ export default function TrainingMatrix() {
                                                             {detail.status}
                                                         </span>
                                                         
-                                                        {detail.bookedDate && (
+                                                        {detail.bookedDate && detail.status !== 'Awaiting Review' && (
                                                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max shadow-sm">
                                                                 <Calendar className="w-3 h-3" />
                                                                 {formatDate(detail.bookedDate)}
