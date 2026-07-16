@@ -610,9 +610,10 @@ export default function TrainingMatrix() {
     });
 
     return (
-        <div className="flex-1 bg-slate-50 min-h-full font-sans text-slate-800 print:bg-white print:p-0">
-            <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-4 shadow-sm print:hidden">
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 max-w-7xl mx-auto">
+        <div className="flex flex-col absolute inset-0 bg-slate-50 font-sans text-slate-800 print:bg-white print:p-0">
+            {/* FIXED MAIN HEADER (NEVER SCROLLS) */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm z-50 shrink-0 print:hidden">
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 max-w-7xl mx-auto w-full">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
                             <GraduationCap className="w-7 h-7 text-indigo-600" />
@@ -650,193 +651,203 @@ export default function TrainingMatrix() {
                 </div>
             </div>
 
-            <div className="p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-full">
-                
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 print:hidden">
-                    <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Compliance Rate</p>
-                            <p className="text-3xl font-black text-slate-800">{complianceRate}%</p>
-                        </div>
-                        <div className={`p-3 rounded-full ${complianceRate >= 90 ? 'bg-emerald-100 text-emerald-600' : complianceRate >= 75 ? 'bg-orange-100 text-orange-600' : 'bg-rose-100 text-rose-600'}`}>
-                            <Activity className="w-6 h-6" />
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Active Staff</p>
-                            <p className="text-3xl font-black text-slate-800">{filteredData.length}</p>
-                        </div>
-                        <div className="p-3 rounded-full bg-blue-100 text-blue-600"><UserCheck className="w-6 h-6" /></div>
-                    </div>
-                    <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Expiring Soon (30d)</p>
-                            <p className="text-3xl font-black text-orange-600">{totalExpiring}</p>
-                        </div>
-                        <div className="p-3 rounded-full bg-orange-100 text-orange-600"><AlertTriangle className="w-6 h-6" /></div>
-                    </div>
-                    <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Missing / Expired</p>
-                            <p className="text-3xl font-black text-rose-600">{totalMissing}</p>
-                        </div>
-                        <div className="p-3 rounded-full bg-rose-100 text-rose-600"><AlertCircle className="w-6 h-6" /></div>
-                    </div>
-                </div>
-
-                {/* AWAITING CONFIRMATION INBOX */}
-                {pendingConfirmations.length > 0 && (
-                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm print:hidden">
-                        <div className="bg-purple-100 border-b border-purple-200 p-4 flex items-center gap-3">
-                            <ClipboardCheck className="w-6 h-6 text-purple-700" />
-                            <div>
-                                <h2 className="text-sm font-bold text-purple-900">Action Required: Training Awaiting Authorisation</h2>
-                                <p className="text-xs text-purple-700 mt-0.5">The following scheduled training dates have passed. Please confirm if the staff member completed the course.</p>
-                            </div>
-                        </div>
-                        <div className="divide-y divide-purple-100">
-                            {pendingConfirmations.map((item, idx) => (
-                                <div key={idx} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            {/* SCROLLABLE BODY */}
+            <div className="flex-1 overflow-auto print:overflow-visible">
+                {/* min-w-max prevents background from tearing if the table is super wide */}
+                <div className="p-6 min-w-max print:p-0 print:min-w-full">
+                    
+                    {/* STATS & FILTERS (These will naturally scroll UP and disappear) */}
+                    <div className="w-full max-w-[1400px] mb-6 print:hidden">
+                        
+                        {/* AWAITING CONFIRMATION INBOX */}
+                        {pendingConfirmations.length > 0 && (
+                            <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm">
+                                <div className="bg-purple-100 border-b border-purple-200 p-4 flex items-center gap-3">
+                                    <ClipboardCheck className="w-6 h-6 text-purple-700" />
                                     <div>
-                                        <p className="font-bold text-slate-800 text-sm">{item.staff.name} <span className="text-slate-500 font-normal ml-1">• {item.course.name}</span></p>
-                                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Scheduled for: {formatDate(item.record.bookedDate)}</p>
-                                    </div>
-                                    <div className="flex gap-2 w-full sm:w-auto">
-                                        <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, true)} className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
-                                            <CheckCircle className="w-4 h-4"/> Confirm Passed
-                                        </button>
-                                        <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, false)} className="flex-1 sm:flex-none px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
-                                            <XCircle className="w-4 h-4"/> Missed / Failed
-                                        </button>
+                                        <h2 className="text-sm font-bold text-purple-900">Action Required: Training Awaiting Authorisation</h2>
+                                        <p className="text-xs text-purple-700 mt-0.5">The following scheduled training dates have passed. Please confirm if the staff member completed the course.</p>
                                     </div>
                                 </div>
-                            ))}
+                                <div className="divide-y divide-purple-100">
+                                    {pendingConfirmations.map((item, idx) => (
+                                        <div key={idx} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{item.staff.name} <span className="text-slate-500 font-normal ml-1">• {item.course.name}</span></p>
+                                                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Scheduled for: {formatDate(item.record.bookedDate)}</p>
+                                            </div>
+                                            <div className="flex gap-2 w-full sm:w-auto">
+                                                <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, true)} className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <CheckCircle className="w-4 h-4"/> Confirm Passed
+                                                </button>
+                                                <button onClick={() => handleConfirmTraining(item.staff.id, item.course.name, item.record, false)} className="flex-1 sm:flex-none px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <XCircle className="w-4 h-4"/> Missed / Failed
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Compliance Rate</p>
+                                    <p className="text-3xl font-black text-slate-800">{complianceRate}%</p>
+                                </div>
+                                <div className={`p-3 rounded-full ${complianceRate >= 90 ? 'bg-emerald-100 text-emerald-600' : complianceRate >= 75 ? 'bg-orange-100 text-orange-600' : 'bg-rose-100 text-rose-600'}`}>
+                                    <Activity className="w-6 h-6" />
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Active Staff</p>
+                                    <p className="text-3xl font-black text-slate-800">{filteredData.length}</p>
+                                </div>
+                                <div className="p-3 rounded-full bg-blue-100 text-blue-600"><UserCheck className="w-6 h-6" /></div>
+                            </div>
+                            <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Expiring Soon (30d)</p>
+                                    <p className="text-3xl font-black text-orange-600">{totalExpiring}</p>
+                                </div>
+                                <div className="p-3 rounded-full bg-orange-100 text-orange-600"><AlertTriangle className="w-6 h-6" /></div>
+                            </div>
+                            <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Missing / Expired</p>
+                                    <p className="text-3xl font-black text-rose-600">{totalMissing}</p>
+                                </div>
+                                <div className="p-3 rounded-full bg-rose-100 text-rose-600"><AlertCircle className="w-6 h-6" /></div>
+                            </div>
                         </div>
-                    </div>
-                )}
 
-                <div className="mb-4 flex flex-wrap gap-2 pb-2 print:hidden justify-between items-center">
-                    <div className="flex gap-2 flex-wrap">
-                        {['All', ...roles.map(r => r.name)].map(role => (
-                            <button 
-                                key={role}
-                                onClick={() => setFilter(role)}
-                                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${filter === role ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
-                            >
-                                {role === 'All' ? 'All' : `${role}s`}
-                            </button>
-                        ))}
-                    </div>
-                    <button 
-                        onClick={() => setShowArchived(!showArchived)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${showArchived ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
-                    >
-                        <Archive className="w-4 h-4" /> {showArchived ? 'Hide Archived' : 'Show Archived'}
-                    </button>
-                </div>
-
-                <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-auto max-h-[70vh] print:overflow-visible print:border-none print:shadow-none print:max-h-none">
-                    <table className="w-full text-left border-collapse text-sm relative">
-                        <thead className="sticky top-0 z-30 shadow-sm print:static print:shadow-none">
-                            <tr className="bg-white">
-                                <th 
-                                    className="p-4 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-50 sticky left-0 z-40 bg-white border-r border-b border-slate-200 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static"
-                                    onClick={() => handleSort('name')}
-                                >
-                                    Staff Member
-                                </th>
-                                {courses.map(course => (
-                                    <th 
-                                        key={course.name} 
-                                        className="p-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-50 bg-white border-r border-b border-slate-200 align-bottom min-w-[150px]"
-                                        onClick={() => handleSort(course.name)}
+                        <div className="flex flex-wrap gap-2 pb-2 justify-between items-center">
+                            <div className="flex gap-2 flex-wrap">
+                                {['All', ...roles.map(r => r.name)].map(role => (
+                                    <button 
+                                        key={role}
+                                        onClick={() => setFilter(role)}
+                                        className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${filter === role ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
                                     >
-                                        <div className="whitespace-normal leading-tight text-base mb-1">{course.name}</div>
-                                        <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                                            {course.freq ? `EVERY ${course.freq} MONTHS` : 'ONCE'}
-                                        </div>
-                                    </th>
+                                        {role === 'All' ? 'All' : `${role}s`}
+                                    </button>
                                 ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredData.map((staff, idx) => {
-                                const records = staff.records || {};
-                                return (
-                                <tr key={idx} className={`border-b border-slate-100 transition-colors print:border-slate-300 ${staff.status === 'Archived' ? 'opacity-50 grayscale' : ''}`}>
-                                    <td className="p-4 sticky left-0 z-20 bg-white border-r border-b border-slate-100 align-top shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static">
-                                        <div className="font-bold text-indigo-700 text-base flex items-center gap-2">
-                                          {staff.name} 
-                                          {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Archived</span>}
-                                        </div>
-                                        <div className="bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase font-bold text-[10px] px-2 py-0.5 rounded inline-block mt-1 tracking-wider">
-                                            {staff.role}
-                                        </div>
-                                        {staff.remarks && (
-                                            <div className="text-[10px] text-slate-400 mt-2 italic leading-tight w-full whitespace-normal print:hidden">"{staff.remarks}"</div>
-                                        )}
-                                    </td>
-                                    {courses.map(course => {
-                                        const detail = calculateCellStatus(records[course.name], course, staff.role);
-                                        
-                                        if (detail.status === 'N/A') {
-                                            return (
-                                              <td 
-                                                key={course.name} 
-                                                onClick={detail.auto ? undefined : () => handleCellOpen(staff.id, course.name, records)} 
-                                                className={`p-4 border-r border-slate-100 text-center align-middle ${detail.auto ? 'bg-slate-50/50 print:bg-white' : 'print:bg-white cursor-pointer hover:bg-slate-50'}`}
-                                                title={detail.auto ? 'Not required for this role' : ''}
-                                              >
-                                                <span className="font-bold text-lg text-slate-200">N/A</span>
-                                              </td>
-                                            );
-                                        }
-
-                                        return (
-                                            <td 
-                                              key={course.name} 
-                                              onClick={() => handleCellOpen(staff.id, course.name, records)}
-                                              className="p-4 border-r border-slate-100 align-top cursor-pointer hover:bg-slate-50/50 transition-colors group"
-                                            >
-                                                <div className="flex flex-col gap-1.5">
-                                                    {/* Dates Section */}
-                                                    {detail.date && (
-                                                        <div className="leading-tight mb-0.5">
-                                                            <div className="font-bold text-slate-800 text-[13px]">{formatDate(detail.date)}</div>
-                                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">
-                                                                EXP: {detail.expiry === 'Never' ? 'NEVER EXPIRES' : formatDate(detail.expiry)}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Badges Section */}
-                                                    <div className="flex flex-col items-start gap-1">
-                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold w-max ${getStatusStyle(detail.status)}`}>
-                                                            {getStatusIcon(detail.status)}
-                                                            {detail.status}
-                                                        </span>
-                                                        
-                                                        {detail.bookedDate && detail.status !== 'Awaiting Review' && (
-                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max shadow-sm">
-                                                                <Calendar className="w-3 h-3" />
-                                                                {formatDate(detail.bookedDate)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            )})}
-                        </tbody>
-                    </table>
-                    {filteredData.length === 0 && (
-                        <div className="p-8 text-center text-slate-500">
-                            No staff members found matching your criteria. Visit the "Staff Directory" to add team members.
+                            </div>
+                            <button 
+                                onClick={() => setShowArchived(!showArchived)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${showArchived ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}
+                            >
+                                <Archive className="w-4 h-4" /> {showArchived ? 'Hide Archived' : 'Show Archived'}
+                            </button>
                         </div>
-                    )}
+                    </div>
+
+                    {/* TABLE GRID */}
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl print:border-none print:shadow-none pb-12">
+                        <table className="w-full text-left border-collapse text-sm relative">
+                            {/* THEAD sticks to the top of the scrollable body! */}
+                            <thead className="sticky top-0 z-40 bg-white shadow-sm ring-1 ring-slate-200 print:static print:ring-0">
+                                <tr>
+                                    <th 
+                                        className="p-4 font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-50 sticky left-0 z-50 bg-slate-50 border-r border-b border-slate-200 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static"
+                                        onClick={() => handleSort('name')}
+                                    >
+                                        Staff Member
+                                    </th>
+                                    {courses.map(course => (
+                                        <th 
+                                            key={course.name} 
+                                            className="p-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-50 bg-white border-r border-b border-slate-200 align-bottom min-w-[150px]"
+                                            onClick={() => handleSort(course.name)}
+                                        >
+                                            <div className="whitespace-normal leading-tight text-base mb-1">{course.name}</div>
+                                            <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                                                {course.freq ? `EVERY ${course.freq} MONTHS` : 'ONCE'}
+                                            </div>
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredData.map((staff, idx) => {
+                                    const records = staff.records || {};
+                                    return (
+                                    <tr key={idx} className={`border-b border-slate-100 transition-colors print:border-slate-300 ${staff.status === 'Archived' ? 'opacity-50 grayscale' : ''}`}>
+                                        <td className="p-4 sticky left-0 z-30 bg-white border-r border-b border-slate-100 align-top shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none print:static">
+                                            <div className="font-bold text-indigo-700 text-base flex items-center gap-2">
+                                              {staff.name} 
+                                              {staff.status === 'Archived' && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Archived</span>}
+                                            </div>
+                                            <div className="bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase font-bold text-[10px] px-2 py-0.5 rounded inline-block mt-1 tracking-wider">
+                                                {staff.role}
+                                            </div>
+                                            {staff.remarks && (
+                                                <div className="text-[10px] text-slate-400 mt-2 italic leading-tight w-full whitespace-normal print:hidden">"{staff.remarks}"</div>
+                                            )}
+                                        </td>
+                                        {courses.map(course => {
+                                            const detail = calculateCellStatus(records[course.name], course, staff.role);
+                                            
+                                            if (detail.status === 'N/A') {
+                                                return (
+                                                  <td 
+                                                    key={course.name} 
+                                                    onClick={detail.auto ? undefined : () => handleCellOpen(staff.id, course.name, records)} 
+                                                    className={`p-4 border-r border-slate-100 text-center align-middle ${detail.auto ? 'bg-slate-50/50 print:bg-white' : 'print:bg-white cursor-pointer hover:bg-slate-50'}`}
+                                                    title={detail.auto ? 'Not required for this role' : ''}
+                                                  >
+                                                    <span className="font-bold text-lg text-slate-200">N/A</span>
+                                                  </td>
+                                                );
+                                            }
+
+                                            return (
+                                                <td 
+                                                  key={course.name} 
+                                                  onClick={() => handleCellOpen(staff.id, course.name, records)}
+                                                  className="p-4 border-r border-slate-100 align-top cursor-pointer hover:bg-slate-50/50 transition-colors group"
+                                                >
+                                                    <div className="flex flex-col gap-1.5">
+                                                        {/* Dates Section */}
+                                                        {detail.date && (
+                                                            <div className="leading-tight mb-0.5">
+                                                                <div className="font-bold text-slate-800 text-[13px]">{formatDate(detail.date)}</div>
+                                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">
+                                                                    EXP: {detail.expiry === 'Never' ? 'NEVER EXPIRES' : formatDate(detail.expiry)}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Badges Section */}
+                                                        <div className="flex flex-col items-start gap-1">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold w-max ${getStatusStyle(detail.status)}`}>
+                                                                {getStatusIcon(detail.status)}
+                                                                {detail.status}
+                                                            </span>
+                                                            
+                                                            {detail.bookedDate && detail.status !== 'Awaiting Review' && (
+                                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-white text-indigo-600 border border-indigo-200 mt-1 w-max shadow-sm">
+                                                                    <Calendar className="w-3 h-3" />
+                                                                    {formatDate(detail.bookedDate)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                )})}
+                            </tbody>
+                        </table>
+                        {filteredData.length === 0 && (
+                            <div className="p-8 text-center text-slate-500">
+                                No staff members found matching your criteria. Visit the "Staff Directory" to add team members.
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
