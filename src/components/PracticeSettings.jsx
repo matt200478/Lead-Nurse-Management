@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Plus, Edit2, Trash2, X, AlertCircle, Loader2, ShieldCheck, Palette } from 'lucide-react';
+import { Settings, Plus, Edit2, Trash2, X, AlertCircle, Loader2, ShieldCheck, Palette, User } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -18,9 +18,9 @@ const PRESET_COLORS = [
 ];
 
 const DEFAULT_ROLES = [
-  { id: 'nurse', name: 'Nurse', color: 'bg-blue-500' },
-  { id: 'hca', name: 'HCA', color: 'bg-emerald-500' },
-  { id: 'anp', name: 'ANP', color: 'bg-purple-500' }
+  { id: 'nurse', name: 'Nurse', color: 'bg-blue-500', isAdmin: false },
+  { id: 'hca', name: 'HCA', color: 'bg-emerald-500', isAdmin: false },
+  { id: 'anp', name: 'ANP', color: 'bg-purple-500', isAdmin: false }
 ];
 
 export default function PracticeSettings() {
@@ -30,7 +30,7 @@ export default function PracticeSettings() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
-  const [roleForm, setRoleForm] = useState({ name: '', color: 'bg-slate-500' });
+  const [roleForm, setRoleForm] = useState({ name: '', color: 'bg-slate-500', isAdmin: false });
   const [roleToDelete, setRoleToDelete] = useState(null);
 
   useEffect(() => {
@@ -70,10 +70,10 @@ export default function PracticeSettings() {
   const handleOpenModal = (role = null) => {
     if (role) {
       setEditingRole(role);
-      setRoleForm({ name: role.name, color: role.color });
+      setRoleForm({ name: role.name, color: role.color, isAdmin: role.isAdmin || false });
     } else {
       setEditingRole(null);
-      setRoleForm({ name: '', color: PRESET_COLORS[0].class });
+      setRoleForm({ name: '', color: PRESET_COLORS[0].class, isAdmin: false });
     }
     setIsModalOpen(true);
   };
@@ -85,14 +85,14 @@ export default function PracticeSettings() {
     if (editingRole) {
       // Update existing
       newRoles = roles.map(r => 
-        r.id === editingRole.id ? { ...r, name: roleForm.name.trim(), color: roleForm.color } : r
+        r.id === editingRole.id ? { ...r, name: roleForm.name.trim(), color: roleForm.color, isAdmin: roleForm.isAdmin } : r
       );
     } else {
       // Add new
       const newId = roleForm.name.trim().toLowerCase().replace(/\s+/g, '-');
       // Prevent duplicates
       if (roles.some(r => r.id === newId)) return alert("A role with this name already exists.");
-      newRoles = [...roles, { id: newId, name: roleForm.name.trim(), color: roleForm.color }];
+      newRoles = [...roles, { id: newId, name: roleForm.name.trim(), color: roleForm.color, isAdmin: roleForm.isAdmin }];
     }
 
     updateDbRoles(newRoles);
@@ -131,9 +131,9 @@ export default function PracticeSettings() {
           <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <div>
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-500" /> System Roles
+                <ShieldCheck className="w-5 h-5 text-indigo-500" /> System Roles & Security
               </h2>
-              <p className="text-xs text-slate-500 mt-1">These roles determine staff filtering, training requirements, and Cover Board badges.</p>
+              <p className="text-xs text-slate-500 mt-1">These roles determine staff filtering, badges, and system access levels.</p>
             </div>
             <button 
               onClick={() => handleOpenModal()} 
@@ -147,9 +147,20 @@ export default function PracticeSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {roles.map(role => (
                 <div key={role.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 transition-all group">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full ${role.color} shadow-sm ring-2 ring-white`}></div>
-                    <span className="font-bold text-slate-700">{role.name}</span>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-4 h-4 rounded-full ${role.color} shadow-sm ring-2 ring-white mt-1`}></div>
+                    <div>
+                      <span className="font-bold text-slate-700 block leading-none mb-1.5">{role.name}</span>
+                      {role.isAdmin ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                          <ShieldCheck className="w-3 h-3" /> Full Access
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                          <User className="w-3 h-3" /> Staff Access
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => handleOpenModal(role)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded transition-colors"><Edit2 className="w-4 h-4" /></button>
@@ -164,8 +175,8 @@ export default function PracticeSettings() {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-[400px] max-w-[95vw]">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+          <div className="bg-white rounded-xl shadow-xl w-[450px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold">{editingRole ? 'Edit Role' : 'Add New Role'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
             </div>
@@ -180,6 +191,28 @@ export default function PracticeSettings() {
                   value={roleForm.name}
                   onChange={e => setRoleForm({...roleForm, name: e.target.value})}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">System Access Level</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={() => setRoleForm({...roleForm, isAdmin: true})}
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${roleForm.isAdmin ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                  >
+                    <ShieldCheck className="w-6 h-6" />
+                    <div className="text-sm font-bold">Full Access</div>
+                    <div className="text-[10px] text-center opacity-80 leading-tight">Access to Settings, Directory & Rota editing</div>
+                  </button>
+                  <button 
+                    onClick={() => setRoleForm({...roleForm, isAdmin: false})}
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${!roleForm.isAdmin ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                  >
+                    <User className="w-6 h-6" />
+                    <div className="text-sm font-bold">Staff Access</div>
+                    <div className="text-[10px] text-center opacity-80 leading-tight">Limited to Cover Board & Leave Requests</div>
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -199,7 +232,7 @@ export default function PracticeSettings() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 rounded-b-xl">
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 sticky bottom-0">
               <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-bold hover:bg-slate-50">Cancel</button>
               <button onClick={handleSaveRole} disabled={!roleForm.name.trim()} className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">Save Role</button>
             </div>
