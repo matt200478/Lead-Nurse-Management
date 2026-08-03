@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calculator, CalendarDays, Clock, Activity, UserCheck, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { Calculator, CalendarDays, Clock, Activity, UserCheck, AlertTriangle, Loader2, RefreshCw, X, Plus } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { onSnapshot } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -74,6 +74,13 @@ const calculateHours = (start, end) => {
   return { gross, net };
 };
 
+const toYMD = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export default function AnnualLeaveCalculator() {
   const today = new Date();
   const currentFinancialYear = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
@@ -96,13 +103,16 @@ export default function AnnualLeaveCalculator() {
   const [empEnd, setEmpEnd] = useState(`${currentFinancialYear + 1}-03-31`);
   
   const [contractedHours, setContractedHours] = useState(37.5);
-  const [baseEntitlementDays, setBaseEntitlementDays] = useState(32); 
+  // Default changed to 30 as requested
+  const [baseEntitlementDays, setBaseEntitlementDays] = useState(30); 
   
   const [workingDays, setWorkingDays] = useState({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false });
   const [dailyNetHours, setDailyNetHours] = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 });
 
+  // Manual Override States
   const [useOverrideG, setUseOverrideG] = useState(false);
-  const [manualBHDeduction, setManualBHDeduction] = useState(0);
+  const [manualBHList, setManualBHList] = useState([]);
+  const [manualBHForm, setManualBHForm] = useState({ name: '', date: '', hours: '' });
 
   const leaveYearOptions = [];
   for (let i = -1; i <= 3; i++) {
@@ -138,6 +148,7 @@ export default function AnnualLeaveCalculator() {
     const id = e.target.value;
     setSelectedStaffId(id);
     setImportAlerts([]);
+    setUseOverrideG(false); // Reset manual override when switching staff
 
     if (!id) {
       setDailyNetHours({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 });
@@ -197,6 +208,10 @@ export default function AnnualLeaveCalculator() {
     setDraftEmpEnd(newEnd);
     setEmpStart(newStart);
     setEmpEnd(newEnd);
+    
+    // Changing the year invalidates custom overrides
+    setUseOverrideG(false);
+    setManualBHList([]);
   };
 
   const handleCalculateLeave = () => {
@@ -234,11 +249,11 @@ export default function AnnualLeaveCalculator() {
       return d >= leaveStartObj.getTime() && d <= leaveEndObj.getTime() && index === self.findIndex(t => t.date.getTime() === d);
     });
 
-    const A = Number(baseEntitlementDays);
+    const A = Number(baseEntitlementDays) || 0;
     const B = bhInLeaveYear.length; 
     const C = A + B;
     const D = C / 5;
-    const E = Number(contractedHours);
+    const E = Number(contractedHours) || 0;
     const F = D * E;
 
     const grossEntitlement = F * proRataMultiplier;
@@ -254,7 +269,6 @@ export default function AnnualLeaveCalculator() {
       
       let deduction = 0;
       if (isWorkingDay) {
-         // Use the specific daily net hours if available, otherwise fallback to the average
          deduction = dailyNetHours[dayOfWeek] > 0 ? dailyNetHours[dayOfWeek] : hoursPerWorkingDay;
       }
 
@@ -266,7 +280,7 @@ export default function AnnualLeaveCalculator() {
     });
 
     const autoBHDeduction = relevantBankHolidays.reduce((sum, h) => sum + h.deduction, 0);
-    const finalBHDeduction = useOverrideG ? Number(manualBHDeduction) : autoBHDeduction;
+    const finalBHDeduction = useOverrideG ? manualBHList.reduce((sum, h) => sum + Number(h.hours || 0), 0) : autoBHDeduction;
 
     const rawNetLeave = grossEntitlement - finalBHDeduction;
     const netLeave = Math.round(rawNetLeave * 2) / 2;
@@ -282,7 +296,34 @@ export default function AnnualLeaveCalculator() {
       relevantBankHolidays,
       hoursPerWorkingDay
     };
-  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, baseEntitlementDays, workingDays, dailyNetHours, useOverrideG, manualBHDeduction]);
+  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, baseEntitlementDays, workingDays, dailyNetHours, useOverrideG, manualBHList]);
+
+  const toggleManualOverride = () => {
+    // If turning on manual mode and the list is empty, pre-fill it with the auto-calculated holidays
+    // This saves massive amounts of time compared to typing them all out
+    if (!useOverrideG && manualBHList.length === 0) {
+      const prefilled = calculations.relevantBankHolidays
+        .filter(h => h.isWorkingDay)
+        .map(h => ({
+          id: Date.now().toString() + Math.random().toString(),
+          name: h.name,
+          date: toYMD(h.date),
+          hours: h.deduction.toFixed(2)
+        }));
+      setManualBHList(prefilled);
+    }
+    setUseOverrideG(!useOverrideG);
+  };
+
+  const handleAddManualBH = () => {
+    if (!manualBHForm.name || !manualBHForm.date || !manualBHForm.hours) return;
+    setManualBHList([...manualBHList, { ...manualBHForm, id: Date.now().toString() }]);
+    setManualBHForm({ name: '', date: '', hours: '' });
+  };
+
+  const handleRemoveManualBH = (id) => {
+    setManualBHList(manualBHList.filter(h => h.id !== id));
+  };
 
   if (!isDbLoaded) {
     return (
@@ -343,12 +384,13 @@ export default function AnnualLeaveCalculator() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Base Entitlement (FTE Days)</label>
-              <select className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" value={baseEntitlementDays} onChange={e => setBaseEntitlementDays(e.target.value)}>
-                <option value="27">27 Days (0-5 Years)</option>
-                <option value="29">29 Days (5-10 Years)</option>
-                <option value="32">32 Days (Standard)</option>
-                <option value="33">33 Days (10+ Years)</option>
-              </select>
+              <input 
+                type="number" 
+                step="0.5" 
+                className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" 
+                value={baseEntitlementDays} 
+                onChange={e => setBaseEntitlementDays(e.target.value)} 
+              />
             </div>
 
             <div>
@@ -406,11 +448,13 @@ export default function AnnualLeaveCalculator() {
             
             <div className="pt-2 border-t border-slate-100">
               <label className="flex items-center gap-2 text-sm text-slate-600 font-medium cursor-pointer">
-                <input type="checkbox" className="rounded text-emerald-500 w-4 h-4" checked={useOverrideG} onChange={() => setUseOverrideG(!useOverrideG)} />
+                <input type="checkbox" className="rounded text-emerald-500 w-4 h-4" checked={useOverrideG} onChange={toggleManualOverride} />
                 Manual BH Deduction Override
               </label>
               {useOverrideG && (
-                <input type="number" step="0.5" className="w-full mt-2 p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Enter hours manually..." value={manualBHDeduction} onChange={e => setManualBHDeduction(e.target.value)} />
+                <p className="text-xs text-slate-500 mt-2 italic pl-6">
+                  Manage manual deductions in the breakdown panel.
+                </p>
               )}
             </div>
           </div>
@@ -447,7 +491,7 @@ export default function AnnualLeaveCalculator() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2 items-start">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-500" /> Calculation Formula</h3>
               <ul className="space-y-1.5 text-sm text-slate-600">
@@ -461,10 +505,10 @@ export default function AnnualLeaveCalculator() {
               </ul>
             </div>
 
-            {!useOverrideG && (
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            {!useOverrideG ? (
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm h-full">
                 <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2"><Clock className="w-4 h-4 text-emerald-500" /> Auto BH Breakdown</h3>
-                <div className="max-h-[150px] overflow-y-auto pr-2 space-y-2">
+                <div className="max-h-[350px] overflow-y-auto pr-2 space-y-2">
                   {calculations.relevantBankHolidays.filter(h => h.isWorkingDay).length > 0 ? (
                     calculations.relevantBankHolidays.filter(h => h.isWorkingDay).map((h, i) => (
                       <div key={i} className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded p-2">
@@ -477,6 +521,67 @@ export default function AnnualLeaveCalculator() {
                     ))
                   ) : (
                     <p className="text-xs text-slate-400 italic">No Bank Holidays fall on working days in this period.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col max-h-[500px]">
+                <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-500" /> Manual BH Override
+                </h3>
+                
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-3 space-y-2 shrink-0 print:hidden">
+                  <input 
+                    type="text" 
+                    placeholder="Holiday Name (e.g. Christmas)" 
+                    className="w-full p-2 text-sm border border-slate-300 rounded outline-none focus:border-emerald-500"
+                    value={manualBHForm.name}
+                    onChange={e => setManualBHForm({...manualBHForm, name: e.target.value})}
+                  />
+                  <div className="flex gap-2">
+                    <input 
+                      type="date" 
+                      className="flex-1 p-2 text-sm border border-slate-300 rounded outline-none focus:border-emerald-500"
+                      value={manualBHForm.date}
+                      onChange={e => setManualBHForm({...manualBHForm, date: e.target.value})}
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="Hrs" 
+                      step="0.5"
+                      className="w-20 p-2 text-sm border border-slate-300 rounded outline-none focus:border-emerald-500"
+                      value={manualBHForm.hours}
+                      onChange={e => setManualBHForm({...manualBHForm, hours: e.target.value})}
+                    />
+                    <button 
+                      onClick={handleAddManualBH}
+                      disabled={!manualBHForm.name || !manualBHForm.date || !manualBHForm.hours}
+                      className="px-3 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto pr-2 space-y-2 flex-1">
+                  {manualBHList.length > 0 ? (
+                    manualBHList.map((h) => {
+                      const [y, m, d] = h.date.split('-');
+                      return (
+                        <div key={h.id} className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded p-2">
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">{h.name}</p>
+                            <p className="text-[10px] text-slate-500">{`${d}/${m}/${y}`}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-mono text-rose-600 font-bold">-{Number(h.hours).toFixed(2)}h</span>
+                            <button onClick={() => handleRemoveManualBH(h.id)} className="text-slate-400 hover:text-red-500 p-1 print:hidden"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-slate-400 italic text-center py-4">No manual deductions added.</p>
                   )}
                 </div>
               </div>
