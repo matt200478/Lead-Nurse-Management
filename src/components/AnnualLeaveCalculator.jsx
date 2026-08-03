@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calculator, CalendarDays, Clock, Activity, UserCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import { Calculator, CalendarDays, Clock, Activity, UserCheck, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { onSnapshot } from 'firebase/firestore';
 import { auth, getRotaDocRef } from '../firebase';
@@ -63,7 +63,9 @@ const getUKBankHolidays = (year) => {
 };
 
 export default function AnnualLeaveCalculator() {
-  const currentYear = new Date().getFullYear();
+  const today = new Date();
+  // UK Financial leave year runs April to March
+  const currentFinancialYear = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
   
   const [user, setUser] = useState(null);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
@@ -72,18 +74,35 @@ export default function AnnualLeaveCalculator() {
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [importAlerts, setImportAlerts] = useState([]);
 
-  const [leaveYearStart, setLeaveYearStart] = useState(`${currentYear}-04-01`);
-  const [leaveYearEnd, setLeaveYearEnd] = useState(`${currentYear + 1}-03-31`);
-  const [empStart, setEmpStart] = useState(`${currentYear}-04-01`);
-  const [empEnd, setEmpEnd] = useState(`${currentYear + 1}-03-31`);
+  // Leave Year Dropdown State
+  const [selectedLeaveYear, setSelectedLeaveYear] = useState(currentFinancialYear);
+  const [leaveYearStart, setLeaveYearStart] = useState(`${currentFinancialYear}-04-01`);
+  const [leaveYearEnd, setLeaveYearEnd] = useState(`${currentFinancialYear + 1}-03-31`);
+  
+  // Draft states for manual editing before calculating
+  const [draftEmpStart, setDraftEmpStart] = useState(`${currentFinancialYear}-04-01`);
+  const [draftEmpEnd, setDraftEmpEnd] = useState(`${currentFinancialYear + 1}-03-31`);
+
+  // Active states used by the actual calculation engine
+  const [empStart, setEmpStart] = useState(`${currentFinancialYear}-04-01`);
+  const [empEnd, setEmpEnd] = useState(`${currentFinancialYear + 1}-03-31`);
   
   const [contractedHours, setContractedHours] = useState(37.5);
-  // Default to 32 as requested
   const [baseEntitlementDays, setBaseEntitlementDays] = useState(32); 
   
   const [workingDays, setWorkingDays] = useState({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false });
   const [useOverrideG, setUseOverrideG] = useState(false);
   const [manualBHDeduction, setManualBHDeduction] = useState(0);
+
+  // Generate Dropdown Options for Financial Years
+  const leaveYearOptions = [];
+  for (let i = -1; i <= 3; i++) {
+    const y = currentFinancialYear + i;
+    leaveYearOptions.push({
+      label: `Apr ${y.toString().slice(-2)} / Mar ${(y + 1).toString().slice(-2)}`,
+      value: y
+    });
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -149,6 +168,28 @@ export default function AnnualLeaveCalculator() {
     }
 
     setImportAlerts(alerts);
+  };
+
+  const handleLeaveYearChange = (e) => {
+    const year = parseInt(e.target.value);
+    setSelectedLeaveYear(year);
+    
+    const newStart = `${year}-04-01`;
+    const newEnd = `${year + 1}-03-31`;
+    
+    setLeaveYearStart(newStart);
+    setLeaveYearEnd(newEnd);
+    
+    // Automatically update draft and active employment dates to match the full new year
+    setDraftEmpStart(newStart);
+    setDraftEmpEnd(newEnd);
+    setEmpStart(newStart);
+    setEmpEnd(newEnd);
+  };
+
+  const handleCalculateLeave = () => {
+    setEmpStart(draftEmpStart);
+    setEmpEnd(draftEmpEnd);
   };
 
   const toggleDay = (dayIndex) => {
@@ -325,16 +366,37 @@ export default function AnnualLeaveCalculator() {
 
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <h3 className="font-bold border-b border-slate-100 pb-2 text-slate-800">Leave Period</h3>
-            <div className="grid grid-cols-2 gap-3">
+            
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Financial Leave Year</label>
+              <select 
+                className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50 text-emerald-800 font-bold"
+                value={selectedLeaveYear}
+                onChange={handleLeaveYearChange}
+              >
+                {leaveYearOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Emp. Start</label>
-                <input type="date" className="w-full p-1.5 text-sm border border-slate-300 rounded-md outline-none focus:ring-2 focus:ring-emerald-500" value={empStart} onChange={e => setEmpStart(e.target.value)} />
+                <input type="date" className="w-full p-1.5 text-sm border border-slate-300 rounded-md outline-none focus:ring-2 focus:ring-emerald-500" value={draftEmpStart} onChange={e => setDraftEmpStart(e.target.value)} />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Emp. End</label>
-                <input type="date" className="w-full p-1.5 text-sm border border-slate-300 rounded-md outline-none focus:ring-2 focus:ring-emerald-500" value={empEnd} onChange={e => setEmpEnd(e.target.value)} />
+                <input type="date" className="w-full p-1.5 text-sm border border-slate-300 rounded-md outline-none focus:ring-2 focus:ring-emerald-500" value={draftEmpEnd} onChange={e => setDraftEmpEnd(e.target.value)} />
               </div>
             </div>
+
+            <button 
+              onClick={handleCalculateLeave}
+              className="w-full py-2.5 mt-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" /> Calculate Leave
+            </button>
             
             <div className="pt-2 border-t border-slate-100">
               <label className="flex items-center gap-2 text-sm text-slate-600 font-medium cursor-pointer">
