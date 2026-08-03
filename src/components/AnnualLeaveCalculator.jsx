@@ -62,9 +62,20 @@ const getUKBankHolidays = (year) => {
   return holidays;
 };
 
+const calculateHours = (start, end) => {
+  if (!start || !end) return { gross: 0, net: 0 };
+  const [startH, startM] = start.split(':').map(Number);
+  const [endH, endM] = end.split(':').map(Number);
+  
+  let gross = (endH + endM / 60) - (startH + startM / 60);
+  if (gross < 0) gross += 24; 
+  
+  const net = gross > 6 ? gross - 1 : gross;
+  return { gross, net };
+};
+
 export default function AnnualLeaveCalculator() {
   const today = new Date();
-  // UK Financial leave year runs April to March
   const currentFinancialYear = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
   
   const [user, setUser] = useState(null);
@@ -74,16 +85,13 @@ export default function AnnualLeaveCalculator() {
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [importAlerts, setImportAlerts] = useState([]);
 
-  // Leave Year Dropdown State
   const [selectedLeaveYear, setSelectedLeaveYear] = useState(currentFinancialYear);
   const [leaveYearStart, setLeaveYearStart] = useState(`${currentFinancialYear}-04-01`);
   const [leaveYearEnd, setLeaveYearEnd] = useState(`${currentFinancialYear + 1}-03-31`);
   
-  // Draft states for manual editing before calculating
   const [draftEmpStart, setDraftEmpStart] = useState(`${currentFinancialYear}-04-01`);
   const [draftEmpEnd, setDraftEmpEnd] = useState(`${currentFinancialYear + 1}-03-31`);
 
-  // Active states used by the actual calculation engine
   const [empStart, setEmpStart] = useState(`${currentFinancialYear}-04-01`);
   const [empEnd, setEmpEnd] = useState(`${currentFinancialYear + 1}-03-31`);
   
@@ -91,10 +99,11 @@ export default function AnnualLeaveCalculator() {
   const [baseEntitlementDays, setBaseEntitlementDays] = useState(32); 
   
   const [workingDays, setWorkingDays] = useState({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false });
+  const [dailyNetHours, setDailyNetHours] = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 });
+
   const [useOverrideG, setUseOverrideG] = useState(false);
   const [manualBHDeduction, setManualBHDeduction] = useState(0);
 
-  // Generate Dropdown Options for Financial Years
   const leaveYearOptions = [];
   for (let i = -1; i <= 3; i++) {
     const y = currentFinancialYear + i;
@@ -130,24 +139,26 @@ export default function AnnualLeaveCalculator() {
     setSelectedStaffId(id);
     setImportAlerts([]);
 
-    if (!id) return;
+    if (!id) {
+      setDailyNetHours({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 });
+      return;
+    }
 
     const staff = staffList.find(s => s.id === parseInt(id));
     if (!staff) return;
 
     let alerts = [];
 
-    // Map contracted hours
     if (staff.contractedHours && staff.contractedHours > 0) {
       setContractedHours(staff.contractedHours);
     } else {
       alerts.push("Contracted hours missing in profile. Please input manually.");
     }
 
-    // Map working days from schedule
     if (staff.schedule && Object.keys(staff.schedule).length > 0) {
       const dayMap = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0 };
       const newWorkingDays = { 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 0: false };
+      const newDailyNetHours = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 };
       let hasShifts = false;
 
       Object.keys(staff.schedule).forEach(dayName => {
@@ -155,11 +166,13 @@ export default function AnnualLeaveCalculator() {
         if (shift && shift.start && shift.end) {
           newWorkingDays[dayMap[dayName]] = true;
           hasShifts = true;
+          newDailyNetHours[dayMap[dayName]] = calculateHours(shift.start, shift.end).net;
         }
       });
 
       if (hasShifts) {
         setWorkingDays(newWorkingDays);
+        setDailyNetHours(newDailyNetHours);
       } else {
         alerts.push("Schedule is empty. Please select standard working days manually.");
       }
@@ -180,7 +193,6 @@ export default function AnnualLeaveCalculator() {
     setLeaveYearStart(newStart);
     setLeaveYearEnd(newEnd);
     
-    // Automatically update draft and active employment dates to match the full new year
     setDraftEmpStart(newStart);
     setDraftEmpEnd(newEnd);
     setEmpStart(newStart);
@@ -217,51 +229,45 @@ export default function AnnualLeaveCalculator() {
       ...getUKBankHolidays(leaveEndObj.getFullYear())
     ];
     
-    // Find total FT Bank Holidays in the leave year (B)
     const bhInLeaveYear = allBHs.filter((h, index, self) => {
       const d = h.date.getTime();
       return d >= leaveStartObj.getTime() && d <= leaveEndObj.getTime() && index === self.findIndex(t => t.date.getTime() === d);
     });
 
-    // --- APPLYING THE NEW A -> F FORMULA ---
-    
-    // A = Equivalent annual leave entitlement given to full-time employee
     const A = Number(baseEntitlementDays);
-    
-    // B = Equivalent annual Bank Holidays given to full-time employees
     const B = bhInLeaveYear.length; 
-    
-    // C = Total entitlement for paid leave full-time employee DAYS (A+B)
     const C = A + B;
-    
-    // D = Number of Full-time days (C) divided by 5 (working days per week)
     const D = C / 5;
-    
-    // E = Number of hours worked per week
     const E = Number(contractedHours);
-    
-    // F = Number of weeks FT equivalent (D) MULTIPLIED by Number of hours worked per week (E)
     const F = D * E;
 
-    // Gross Entitlement (incorporating pro-rata if they start mid-year)
     const grossEntitlement = F * proRataMultiplier;
 
-    // Calculate Bank Holidays falling on working days during employment period
     const bhInEmployment = allBHs.filter((h, index, self) => {
       const d = h.date.getTime();
       return d >= effectiveStart.getTime() && d <= effectiveEnd.getTime() && index === self.findIndex(t => t.date.getTime() === d);
     });
 
-    const relevantBankHolidays = bhInEmployment.map(h => ({
-      ...h,
-      isWorkingDay: workingDays[h.date.getDay()],
-      deduction: workingDays[h.date.getDay()] ? hoursPerWorkingDay : 0
-    }));
+    const relevantBankHolidays = bhInEmployment.map(h => {
+      const dayOfWeek = h.date.getDay();
+      const isWorkingDay = workingDays[dayOfWeek];
+      
+      let deduction = 0;
+      if (isWorkingDay) {
+         // Use the specific daily net hours if available, otherwise fallback to the average
+         deduction = dailyNetHours[dayOfWeek] > 0 ? dailyNetHours[dayOfWeek] : hoursPerWorkingDay;
+      }
+
+      return {
+        ...h,
+        isWorkingDay,
+        deduction
+      };
+    });
 
     const autoBHDeduction = relevantBankHolidays.reduce((sum, h) => sum + h.deduction, 0);
     const finalBHDeduction = useOverrideG ? Number(manualBHDeduction) : autoBHDeduction;
 
-    // Deduct BHs and round to nearest 0.5
     const rawNetLeave = grossEntitlement - finalBHDeduction;
     const netLeave = Math.round(rawNetLeave * 2) / 2;
 
@@ -276,7 +282,7 @@ export default function AnnualLeaveCalculator() {
       relevantBankHolidays,
       hoursPerWorkingDay
     };
-  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, baseEntitlementDays, workingDays, useOverrideG, manualBHDeduction]);
+  }, [leaveYearStart, leaveYearEnd, empStart, empEnd, contractedHours, baseEntitlementDays, workingDays, dailyNetHours, useOverrideG, manualBHDeduction]);
 
   if (!isDbLoaded) {
     return (
